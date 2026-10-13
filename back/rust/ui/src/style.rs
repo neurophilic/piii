@@ -7,11 +7,11 @@ pub const N: f64 = 50.0;
 /// The shape rule for everything boxy: in a browser that draws superellipse corners (CSS corner-shape, whose
 /// parameter is log2 of the exponent), the whole box is the superellipse; elsewhere, a small rounded corner.
 pub fn shape_css() -> alloc::string::String {
-    let sel = ".sx,.ric,.win,.win-x,.member,.card,.btn,.input,.list,.stat,.seg,.seg button,.seg a,.consent,.tag,.frame,\
-.drop,.chip,.note,.err-box,.pill,.ric .g";
+    // Every element, the page's frame included: no round corner anywhere. Where superellipse corners cannot be
+    // drawn, square corners (n = 50 is all but square) rather than round ones.
     alloc::format!(
-        "{sel}{{border-radius:6px!important}}@supports (corner-shape:superellipse(2)){{{sel}{{border-radius:50%!important;corner-shape:superellipse({k:.4})}}}}",
-        sel = sel,
+        "@supports (corner-shape:superellipse(2)){{*:not(svg *){{border-radius:50%!important;corner-shape:superellipse({k:.4})!important}}}}\
+@supports not (corner-shape:superellipse(2)){{*:not(svg *){{border-radius:0!important}}}}",
         k = libm_log2(N)
     )
 }
@@ -336,4 +336,25 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .bar .fill{background:var(--accent);border-radius:0}.bar .track{border-radius:0}
 .consent{border-radius:0;border:1.5px solid #2b2b2b}
 @media (max-width:699px){.scene .foot{display:none}}
+/* wiring */
+.wires .w-hit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
+.wires .w.sel{stroke:var(--accent);stroke-width:3.2}
+.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:6 6}
+.scene.wiring,.scene.wiring *{cursor:crosshair!important}
+.sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
+.sx.locked{cursor:default}
+.wire-note{position:absolute;left:16px;bottom:14px;z-index:5;padding:7px 12px;background:var(--ink);color:var(--paper);font-size:13px;
+max-width:min(520px,calc(100% - 32px))}
+/* the π canvas, floating on top of an open super */
+.win{left:12px}
+.scene.floating{position:fixed;inset:auto;right:18px;bottom:18px;z-index:30;background:var(--paper);overflow:hidden;
+box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
+.scene.floating .frame{border-width:2px}
+.scene.floating .sx{cursor:pointer;box-shadow:none}
+.scene.floating .sx:hover{border-color:var(--accent)}
+.scene.floating .sx.lit{outline:6px solid var(--accent);outline-offset:4px;border-color:var(--accent)}
+.pi-tab{position:absolute;left:8px;bottom:8px;z-index:4;width:26px;height:26px;display:grid;place-items:center;background:var(--ink);
+color:var(--paper);font-size:16px;line-height:1}
+.pi-tab:hover{text-decoration:none;background:var(--accent)}
+@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:12px}.win{left:8px;bottom:calc(min(50vw - 12px,30vh) + 24px)}}
 "#;

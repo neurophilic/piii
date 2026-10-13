@@ -24,7 +24,11 @@ Live at https://www.piii.app/
                  [←] [↑]  [↓] [→]
 ```
 
-Magenta wires carry data out of an output (▷ into ◁). Ink wires are sync (△) and condition (▽). The project map (`#/map`) shows the whole lab in the same notation: one prompt fanned out to every engine, and the assessment from manuscript to ledger.
+Magenta wires carry data out of an output (▷ into ◁). Ink wires are sync (△) and condition (▽).
+
+To wire, press a super's edge or one of its ports and drag to another super. To remove a wire, click it and press Delete, or double-click it. Dragging a bar out of a bubble opens what it stands for. A wire into lock, chain or save locks, chains or keeps that super. Wiring a super to reset puts it back where it started. When a super is open, the canvas floats on top of it; click π to return to the whole canvas.
+
+The project map (`#/map`) shows the whole lab in the same notation: one prompt fanned out to every engine, and the assessment from manuscript to ledger.
 
 ## Layout
 

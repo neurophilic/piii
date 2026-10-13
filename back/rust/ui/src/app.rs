@@ -81,6 +81,8 @@ enum Msg {
     PDown(u8, String),
     PMember(u8),
     Activate(u8),
+    WireSel(u8),
+    WireDel(u8),
 }
 
 impl crate::dom::Fill for Msg {
@@ -223,6 +225,10 @@ struct State {
     pend_member: Option<u8>,
     item: Slot,
     item_key: (u8, u8),
+    wires: Vec<WireT>,
+    wire_sel: Option<usize>,
+    wiring: Option<Wiring>,
+    note: String,
 }
 
 static STATE: Global<Option<State>> = Global::new(None);
@@ -232,6 +238,7 @@ const T_POW: u32 = 1;
 const T_TICK: u32 = 2;
 const T_PI: u32 = 3;
 const T_LIVE: u32 = 4;
+const T_NOTE: u32 = 5;
 
 fn st() -> &'static mut State {
     STATE.get().as_mut().expect("started")
@@ -316,13 +323,17 @@ pub fn start() {
         c_busy: false,
         offs: [(0.0, 0.0); NSUP],
         pan: (0.0, 0.0),
-        locked: true,
+        locked: false,
         chained: true,
         dirty: false,
         drag: None,
         pend_member: None,
         item: Slot::default(),
         item_key: (255, 255),
+        wires: Vec::new(),
+        wire_sel: None,
+        wiring: None,
+        note: String::new(),
     };
 
     // Coming back from ORCID: the callback sends ?orcid=…&orcid_name=…&token=… (or ?orcid_error=…).
@@ -363,6 +374,7 @@ pub fn start() {
     s.name = host::store_get("sp_researcher_name").unwrap_or_default();
     *STATE.get() = Some(s);
     layout_load();
+    wires_load();
 
     route();
     let s = st();
@@ -421,6 +433,7 @@ pub fn on_timer(token: u32) {
                 host::timer(if s.pi_shown < 12 { 160 } else { 90 }, T_PI);
             }
         }
+        T_NOTE => s.note.clear(),
         T_LIVE => {
             if matches!(s.page, Page::Home | Page::Live) && !s.live.busy {
                 s.live.busy = true;
@@ -1158,6 +1171,20 @@ fn update(msg: Msg) {
         Msg::PDown(id, xy) => begin_drag(id as usize, &xy),
         Msg::PMember(m) => s.pend_member = Some(m),
         Msg::Activate(id) => activate(id as usize, None),
+        Msg::WireSel(i) => {
+            s.wire_sel = if i == 255 || s.wire_sel == Some(i as usize) { None } else { Some(i as usize) };
+            if s.wire_sel.is_some() {
+                note("Wire selected: press Delete to remove it".to_string());
+            }
+        }
+        Msg::WireDel(i) => {
+            if (i as usize) < s.wires.len() {
+                s.wires.remove(i as usize);
+                s.wire_sel = None;
+                wires_save();
+                note("Wire removed".to_string());
+            }
+        }
         Msg::Retry => {
             for slot in [&mut s.summary, &mut s.rubric, &mut s.dossier, &mut s.piq, &mut s.mine, &mut s.topics, &mut s.live, &mut s.req, &mut s.item] {
                 if slot.err.is_some() {
@@ -1236,7 +1263,7 @@ fn view(s: &State) -> N {
             Page::Map => map_page(),
             Page::Home => txt(""),
         };
-        el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).into()
+        el("div").cls("focus").kid(window_frame(s, page)).kid(scene_view(s, true)).into()
     };
     el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).into()
 }
