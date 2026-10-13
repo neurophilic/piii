@@ -1,0 +1,11 @@
+# Railway build: Python only (owner, 2026-10-13: "no docker"). Nixpacks's Python provider installs
+# requirements.txt (the root one points at back/requirements.txt) and runs the start command below.
+# The front end is Rust built to WebAssembly (front/app/ui.wasm, committed; python back/scripts/tools.py build-ui),
+# so the build has nothing else to do.
+[variables]
+ENVIRONMENT = "production"
+PYTHONUNBUFFERED = "1"
+
+[start]
+# gunicorn.conf.py chdirs into back/ itself (the start command runs from the repository root, with no shell)
+cmd = "gunicorn api:app -c back/gunicorn.conf.py"

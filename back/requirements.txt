@@ -1,0 +1,62 @@
+# Pinned to compatible-release ranges for reproducible production installs.
+# Run `pip install -r requirements.txt` inside a virtualenv.
+#
+# Trimmed vs. the original list: pandas, torchvision, beautifulsoup4,
+# tabulate, and groq were listed but never imported anywhere in the
+# codebase (Groq is reached through the openai-compatible client, not the
+# `groq` SDK) — dropped to keep installs faster and the dependency surface
+# smaller. Everything below is a real import.
+
+# --- Web framework ---
+fastapi~=0.115
+uvicorn[standard]~=0.32
+gunicorn~=23.0
+python-multipart~=0.0.12
+pydantic~=2.9
+
+# --- Scoring engine ---
+# NumPy only. The scoring pipeline, the rubric, Scilem's learned calibration
+# and the Holt forecast are all pure NumPy.
+numpy~=1.26
+
+# --- Optional: PyTorch and Transformers are NOT installed by default ---
+#
+# They were in this list, so every deploy downloaded and shipped roughly 700MB
+# of dependencies that the running application never imported. Both features
+# that use them are off by default:
+#
+#   torch                  -> only the LSTM forecast (USE_LSTM_FORECAST=false).
+#                             The default forecast is Holt's method in NumPy.
+#   transformers/accelerate-> no longer used: the local TinyLlama loader was
+#                             never called and was removed (2026-10-10). The
+#                             assistant answers from live state and its
+#                             knowledge base.
+#
+# The torch import is lazy and its path degrades cleanly when the package is
+# absent, so omitting it changes nothing about default behaviour — it only
+# removes the build time, the image size and the memory pressure. That matters
+# most on a small host, which is exactly where the unused weight hurt.
+#
+# To enable it, uncomment its block AND set the matching env var.
+#
+# LSTM forecast:
+#   --extra-index-url https://download.pytorch.org/whl/cpu
+#   torch~=2.4
+#
+
+# --- LLM providers ---
+openai~=1.51
+# `openrouter` removed: OpenRouter is an OpenAI-compatible endpoint and is
+# reached through the client above. The SDK was imported and never called.
+
+# --- Blockchain / crypto ---
+web3~=7.4
+eth-account~=0.13
+cryptography~=43.0
+
+# --- PDF + web scraping ---
+pymupdf~=1.24
+cloudscraper~=1.2
+
+# --- HTTP ---
+requests~=2.32

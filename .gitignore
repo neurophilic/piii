@@ -1,0 +1,32 @@
+# Secrets — never commit these
+back/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+back/venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Data (SQLite DB, PyTorch weights, logs) — lives outside the repo via
+# SCHOLARPI_DATA_DIR / a mounted volume in production
+*.db
+*.db-wal
+*.db-shm
+*.pt
+logs/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Lab: built at deploy time from the HAL-OS repo by back/scripts/tools.py build-hal
+front/hal/bitllm.img
+front/hal/build.json
+
+# Rust build output
+back/rust/*/target/
+back/rust/ui/target/

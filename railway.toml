@@ -1,0 +1,10 @@
+# Railway build configuration: Nixpacks, Python only (owner, 2026-10-13: "no docker"); see nixpacks.toml.
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+# No startCommand: nixpacks.toml's [start] is the one definition of how this app starts.
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
