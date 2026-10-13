@@ -1263,7 +1263,7 @@ fn view(s: &State) -> N {
             Page::Map => map_page(),
             Page::Home => txt(""),
         };
-        el("div").cls("focus").kid(window_frame(s, page)).kid(scene_view(s, true)).into()
+        el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).into()
     };
     el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).into()
 }

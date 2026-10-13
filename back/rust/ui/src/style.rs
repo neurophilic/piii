@@ -346,7 +346,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .wire-note{position:absolute;left:16px;bottom:14px;z-index:5;padding:7px 12px;background:var(--ink);color:var(--paper);font-size:13px;
 max-width:min(520px,calc(100% - 32px))}
 /* the π canvas, floating on top of an open super */
-.win{left:12px}
+.win{left:80px}
 .scene.floating{position:fixed;inset:auto;right:18px;bottom:18px;z-index:30;background:var(--paper);overflow:hidden;
 box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
 .scene.floating .frame{border-width:2px}
@@ -356,5 +356,5 @@ box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
 .pi-tab{position:absolute;left:8px;bottom:8px;z-index:4;width:26px;height:26px;display:grid;place-items:center;background:var(--ink);
 color:var(--paper);font-size:16px;line-height:1}
 .pi-tab:hover{text-decoration:none;background:var(--accent)}
-@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:12px}.win{left:8px;bottom:calc(min(50vw - 12px,30vh) + 24px)}}
+@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:76px}.win{left:8px;bottom:calc(min(50vw - 12px,30vh) + 88px)}}
 "#;
