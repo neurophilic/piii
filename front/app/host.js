@@ -60,7 +60,10 @@ const host = {
     else if (k === "drop") {
       n.addEventListener("dragover", (e) => e.preventDefault());
       n.addEventListener("drop", (e) => { e.preventDefault(); send(id, k, fileList(e.dataTransfer.files)); });
-    } else n.addEventListener(k, () => send(id, k, n.type === "checkbox" ? (n.checked ? "1" : "0") : (n.value ?? "")));
+    } else n.addEventListener(k, (e) => {
+      if (n.dataset && n.dataset.stop) e.stopPropagation();
+      send(id, k, n.type === "checkbox" ? (n.checked ? "1" : "0") : (n.value ?? ""));
+    });
   },
   body: () => keep(document.body),
   head: () => keep(document.head),
@@ -119,6 +122,11 @@ const bytes = await (await fetch(wasm)).arrayBuffer();
 W = (await WebAssembly.instantiate(bytes, { host })).instance.exports;
 addEventListener("hashchange", () => W.nav());
 addEventListener("resize", () => W.resized());
+addEventListener("keydown", (e) => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (e.key === "Delete" || e.key === "Backspace" || e.key === "Escape") { const [p, l] = put(e.key); W.keyed(p, l); }
+});
 addEventListener("pointermove", (e) => { if (capturing) W.pointer(0, e.clientX, e.clientY); });
 addEventListener("pointerup", (e) => { if (capturing) W.pointer(1, e.clientX, e.clientY); });
 addEventListener("pointercancel", (e) => { if (capturing) W.pointer(2, e.clientX, e.clientY); });

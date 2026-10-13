@@ -92,6 +92,13 @@ pub extern "C" fn pointer(phase: u32, x: f64, y: f64) {
     app::on_pointer(phase, x, y);
 }
 
+/// A key that edits the canvas (Delete, Backspace, Escape), pressed outside any field.
+#[unsafe(no_mangle)]
+pub extern "C" fn keyed(kp: *mut u8, kl: usize) {
+    let key = take(kp, kl);
+    app::on_key(&key);
+}
+
 /// The address changed (a link to #/… was followed, or back or forward).
 #[unsafe(no_mangle)]
 pub extern "C" fn nav() {

@@ -5,6 +5,13 @@
 // on their edges (✦), as written in the site's program (pitechlab.sasm): ▷ an output, ◁ an input, △ sync,
 // ▽ condition. A wire from an output is magenta; the others are ink.
 //
+// Wiring (as the site always did): press a super's edge or one of its ports and drag to another super; the wire is
+// drawn dashed while it is made and the super it would join is lit. Sync and condition (△ ▽) join sync and
+// condition; input and output (◁ ▷) join input and output. A click on a wire selects it, Delete or a double click
+// removes it. Dragging a bar out of a bubble onto anything opens what the bar stands for. A wire into lock locks that
+// super, into chain chains it, into save keeps it (those controls turn cobalt while wired), and wiring a super to
+// reset puts it back where it started. Wires are kept in this browser; reset brings back the start's.
+//
 // Supers can be dragged (unless locked); with the chain on, the holder brings what it holds. Save keeps the
 // layout in this browser, reset brings back the start. A click opens a super: it fills the canvas, every other
 // super becomes an icon in the rail (owner, 2026-10-14: "everything selected/open should be completely shown fit
@@ -90,7 +97,7 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Side {
     L,
     R,
@@ -113,6 +120,99 @@ const WIRES: [(usize, Side, usize, Side, bool); 11] = [
     (S_SAVE, Side::B, S_TOOLS, Side::T, false), // ctl:save▽ Tools△
     (S_LOCK, Side::B, S_SITE, Side::T, false),  // ctl:lock▽ site△
 ];
+
+type WireT = (usize, Side, usize, Side);
+
+fn start_wires() -> Vec<WireT> {
+    WIRES.iter().map(|(a, sa, b, sb, _)| (*a, *sa, *b, *sb)).collect()
+}
+
+fn side_code(x: Side) -> char {
+    match x {
+        Side::L => 'l',
+        Side::R => 'r',
+        Side::T => 't',
+        Side::B => 'b',
+    }
+}
+
+fn side_of(c: &str) -> Option<Side> {
+    match c {
+        "l" => Some(Side::L),
+        "r" => Some(Side::R),
+        "t" => Some(Side::T),
+        "b" => Some(Side::B),
+        _ => None,
+    }
+}
+
+fn wires_save() {
+    let s = st();
+    let mut out = String::from("v1;");
+    for (a, sa, b, sb) in &s.wires {
+        out.push_str(&format!("{}{}-{}{};", a, side_code(*sa), b, side_code(*sb)));
+    }
+    host::store_set("piii:wires", &out);
+}
+
+fn wires_load() {
+    let s = st();
+    s.wires = start_wires();
+    let Some(v) = host::store_get("piii:wires") else { return };
+    let mut it = v.split(';');
+    if it.next() != Some("v1") {
+        return;
+    }
+    let mut out = Vec::new();
+    for w in it.filter(|w| !w.is_empty()) {
+        let Some((a, b)) = w.split_once('-') else { continue };
+        let end = |e: &str| -> Option<(usize, Side)> {
+            let (n, c) = e.split_at(e.len().checked_sub(1)?);
+            let id: usize = n.parse().ok()?;
+            ((id < NSUP) || id == FRAME).then_some(())?;
+            Some((id, side_of(c)?))
+        };
+        if let (Some((a, sa)), Some((b, sb))) = (end(a), end(b)) {
+            out.push((a, sa, b, sb));
+        }
+    }
+    s.wires = out;
+}
+
+/// The supers wired to a control, at any of its ports.
+fn wired_to(s: &State, ctl: usize) -> Vec<usize> {
+    s.wires.iter().filter_map(|(a, _, b, _)| if *a == ctl { Some(*b) } else if *b == ctl { Some(*a) } else { None }).collect()
+}
+
+fn is_ctl_side(x: Side) -> bool {
+    matches!(x, Side::T | Side::B)
+}
+
+fn locked(s: &State, id: usize) -> bool {
+    s.locked || wired_to(s, S_LOCK).contains(&id)
+}
+
+fn name_of(id: usize) -> &'static str {
+    match id {
+        FRAME => "the page",
+        S_SITE => "the site",
+        S_HOLD => "the holder",
+        _ => sup_label(id),
+    }
+}
+
+/// What a wire is being made from: a port of a super, or a bar of a bubble (which opens what it stands for).
+#[derive(Clone, Copy)]
+pub enum From {
+    Port(usize, Side),
+    Bar(usize, usize),
+}
+
+pub struct Wiring {
+    from: From,
+    at: (f64, f64),
+    to: Option<(usize, Side)>,
+}
 
 /// What moves with a super when the chain is on.
 fn held_by(id: usize) -> &'static [usize] {
@@ -235,7 +335,11 @@ struct Geo {
 
 fn geo(s: &State) -> Geo {
     let (w, h) = (host::vw(), host::vh());
-    let narrow = w < 700.0;
+    geo_box(s, w, h, w < 700.0)
+}
+
+/// The canvas laid out in a box of w × h: the whole page, or the floating π canvas over an open super.
+fn geo_box(s: &State, w: f64, h: f64, narrow: bool) -> Geo {
     let (b, dw, dh) = base(narrow);
     let k = (w / dw).min(h / dh).max(0.2);
     let ox = (w - dw * k) / 2.0;
@@ -361,9 +465,9 @@ fn svg_icon(paths: &[&str], size: &str, cls: &str) -> N {
 
 fn control_icon(id: usize, s: &State) -> N {
     match id {
-        S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", "ci accent"),
+        S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if wired_to(s, S_SAVE).is_empty() { "ci" } else { "ci accent" }),
         S_LOCK => {
-            if s.locked {
+            if s.locked || !wired_to(s, S_LOCK).is_empty() {
                 el("svg:svg")
                     .cls("ci accent")
                     .attr("viewBox", "0 0 24 24")
@@ -380,7 +484,7 @@ fn control_icon(id: usize, s: &State) -> N {
         S_CHAIN => svg_icon(
             &["M9 12h6", "M8 8H6.5a4 4 0 0 0 0 8H8", "M16 8h1.5a4 4 0 0 1 0 8H16"],
             "28",
-            if s.chained { "ci" } else { "ci faint" },
+            if !wired_to(s, S_CHAIN).is_empty() { "ci accent" } else if s.chained { "ci" } else { "ci faint" },
         ),
         S_RESET => svg_icon(&["M4 4v6h6", "M4.6 15a8 8 0 1 0 1.9-8.3L4 10"], "24", "ci"),
         S_LEFT => svg_icon(&["M19 12H5", "M11 6l-6 6 6 6"], "26", "ci"),
@@ -453,16 +557,87 @@ fn tools_inside() -> Vec<N> {
 }
 
 fn canvas_view(s: &State) -> N {
-    let g = geo(s);
+    scene_view(s, false)
+}
+
+/// The super an open page belongs to, lit on the floating canvas.
+fn lit(s: &State) -> usize {
+    match s.page {
+        Page::Group(g) | Page::Item(g, _) => GROUPS.get(g as usize).map(|x| x.sup).unwrap_or(99),
+        Page::Map => S_PROJECT,
+        Page::Assess => S_TOOLS,
+        Page::Explore | Page::Live | Page::Paper => S_EXPLORE,
+        Page::Library => S_LIBRARY,
+        Page::Account | Page::Confirm => S_CONNECT,
+        Page::Home => 99,
+    }
+}
+
+/// The π canvas floating on top of an open super (owner, 2026-10-14: "pi canvas is always floating on top"):
+/// the same supers and wires, small, the open one lit; a click opens another, π goes back to the whole canvas.
+fn float_size() -> (f64, f64) {
+    let (vw, vh) = (host::vw(), host::vh());
+    if vw < 700.0 {
+        let w = vw - 24.0;
+        (w, (w * 0.5).min(vh * 0.3))
+    } else {
+        let w = (vw * 0.26).clamp(260.0, 420.0);
+        (w, w * 0.625)
+    }
+}
+
+fn scene_view(s: &State, mini: bool) -> N {
+    let g = if mini {
+        let (w, h) = float_size();
+        geo_box(s, w, h, false)
+    } else {
+        geo(s)
+    };
     // wires and ports, drawn under the supers
     let mut wires = el("svg:svg").cls("wires").attr("aria-hidden", "true").attr("width", "1").attr("height", "1");
-    for (a, sa, b, sb, data) in WIRES {
+    for (i, (a, sa, b, sb)) in s.wires.iter().enumerate() {
+        let (a, sa, b, sb) = (*a, *sa, *b, *sb);
+        let data = sa == Side::R || sb == Side::R; // out of an output
         let (pa, pb) = (port(&g, a, sa), port(&g, b, sb));
         let d = if data && sa == Side::R && sb == Side::L { step(pa, pb) } else { curve(pa, sa, pb, sb) };
-        wires = wires.kid(el("svg:path").cls(if data { "w data" } else { "w" }).attr("d", d));
+        let sel = !mini && s.wire_sel == Some(i);
+        if !mini {
+            // a wide, invisible stroke to take the click
+            wires = wires.kid(
+                el("svg:path")
+                    .cls("w-hit")
+                    .attr("data-stop", "1")
+                    .attr("d", d.clone())
+                    .on("click", Msg::WireSel(i as u8))
+                    .on("dblclick", Msg::WireDel(i as u8)),
+            );
+        }
+        wires = wires.kid(el("svg:path").cls(if data { "w data" } else { "w" }).cls_if(sel, "sel").attr("d", d));
+    }
+    if let (false, Some(w)) = (mini, s.wiring.as_ref()) {
+        let (pa, sa) = match w.from {
+            From::Port(id, side) => (port(&g, id, side), side),
+            From::Bar(gi, _) => {
+                let sup = GROUPS[gi].sup;
+                (port(&g, sup, Side::R), Side::R)
+            }
+        };
+        let d = match w.to {
+            Some((id, side)) => curve(pa, sa, port(&g, id, side), side),
+            None => {
+                let back = match sa {
+                    Side::L => Side::R,
+                    Side::R => Side::L,
+                    Side::T => Side::B,
+                    Side::B => Side::T,
+                };
+                curve(pa, sa, w.at, back)
+            }
+        };
+        wires = wires.kid(el("svg:path").cls("w-temp").attr("d", d));
     }
     let mut stars = String::new();
-    let r = if g.w < 700.0 { 5.5 } else { 8.5 / g.k.max(0.6) };
+    let r = if mini { 3.2 / g.k } else if g.w < 700.0 { 5.5 } else { 8.5 / g.k.max(0.6) };
     for id in 0..NSUP {
         for side in [Side::L, Side::R, Side::T, Side::B] {
             let (x, y) = port(&g, id, side);
@@ -486,11 +661,14 @@ fn canvas_view(s: &State) -> N {
         let (x, y, w, h) = g.rects[id];
         let mut sx = el("div")
             .cls("sx")
+            .cls_if(mini && id == lit(s), "lit")
+            .cls_if(!mini && s.wiring.as_ref().and_then(|w| w.to).map(|(t, _)| t == id).unwrap_or(false), "wire-target")
+            .cls_if(!mini && locked(s, id) && id >= S_WELCOME, "locked")
             .attr("data-s", format!("{}", id))
-            .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h))
-            .on("pdown", Msg::PDown(id as u8, String::new()));
+            .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
+        sx = if mini { sx.on("click", Msg::Activate(id as u8)) } else { sx.on("pdown", Msg::PDown(id as u8, String::new())) };
         let label = sup_label(id);
-        if !label.is_empty() && id != S_HOLD {
+        if !label.is_empty() && id != S_HOLD && !mini {
             sx = sx.attr("tabindex", "0").attr("role", "button").attr("aria-label", label).on("enter", Msg::Activate(id as u8));
         }
         sx = match id {
@@ -518,7 +696,26 @@ fn canvas_view(s: &State) -> N {
         }
         stage = stage.kid(sx);
     }
-    el("div").cls("scene").kid(el("div").cls("frame")).kid(stage).kid(footer()).into()
+    if mini {
+        let (w, h) = float_size();
+        return el("aside")
+            .cls("scene floating")
+            .attr("aria-label", "The canvas")
+            .style(format!("width:{:.0}px;height:{:.0}px", w, h))
+            .kid(el("div").cls("frame"))
+            .kid(stage)
+            .kid(el("a").cls("pi-tab").attr("href", "#/").attr("aria-label", "Back to the whole canvas").attr("title", "The whole canvas").text("π"))
+            .into();
+    }
+    el("div")
+        .cls("scene")
+        .cls_if(s.wiring.is_some(), "wiring")
+        .on("click", Msg::WireSel(255))
+        .kid(el("div").cls("frame"))
+        .kid(stage)
+        .kid_if(!s.note.is_empty(), || el("div").cls("wire-note").attr("role", "status").text(s.note.clone()).into())
+        .kid(footer())
+        .into()
 }
 
 // ---------------------------------------------------------------------------------------------- dragging and opening
@@ -540,6 +737,16 @@ fn begin_drag(id: usize, at: &str) {
     let x: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let y: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let g = geo(s);
+    let p = ((x - g.ox) / g.k, (y - g.oy) / g.k);
+    if s.pend_member.is_none() {
+        if let Some(side) = edge_at(&g, id, p) {
+            s.wire_sel = None;
+            s.wiring = Some(Wiring { from: From::Port(id, side), at: p, to: None });
+            host::capture(true);
+            render();
+            return;
+        }
+    }
     let mut ids = alloc::vec![id];
     if s.chained {
         ids.extend_from_slice(held_by(id));
@@ -549,8 +756,176 @@ fn begin_drag(id: usize, at: &str) {
     host::capture(true);
 }
 
+/// The side of a super a press is on, when it is on its edge (or on one of its ports).
+fn edge_at(g: &Geo, id: usize, p: (f64, f64)) -> Option<Side> {
+    let (x, y, w, h) = g.rects[id];
+    let band = (10.0 / g.k).min(w / 4.0).min(h / 4.0).max(3.0);
+    let port_r = 13.0 / g.k;
+    for side in [Side::L, Side::R, Side::T, Side::B] {
+        let (px, py) = port(g, id, side);
+        if (p.0 - px).abs() + (p.1 - py).abs() <= port_r {
+            return Some(side);
+        }
+    }
+    let d = [(p.0 - x, Side::L), (x + w - p.0, Side::R), (p.1 - y, Side::T), (y + h - p.1, Side::B)];
+    d.iter().filter(|(v, _)| *v >= -band && *v <= band).min_by(|a, b| a.0.abs().partial_cmp(&b.0.abs()).unwrap_or(core::cmp::Ordering::Equal)).map(|(_, s)| *s)
+}
+
+/// The super under a point (the topmost), the site when only the site is there, the page near its edge.
+fn sup_at(g: &Geo, p: (f64, f64)) -> Option<usize> {
+    for id in (0..NSUP).rev() {
+        if id == S_SITE {
+            continue;
+        }
+        let (x, y, w, h) = g.rects[id];
+        if p.0 >= x - 4.0 && p.0 <= x + w + 4.0 && p.1 >= y - 4.0 && p.1 <= y + h + 4.0 {
+            return Some(id);
+        }
+    }
+    let (x, y, w, h) = g.rects[S_SITE];
+    if p.0 >= x && p.0 <= x + w && p.1 >= y && p.1 <= y + h {
+        return Some(S_SITE);
+    }
+    let (vx, vy) = (p.0 * g.k + g.ox, p.1 * g.k + g.oy);
+    if vx < 28.0 || vy < 28.0 || vx > g.w - 28.0 || vy > g.h - 28.0 {
+        return Some(FRAME);
+    }
+    None
+}
+
+/// The side of the target a wire joins: the nearest side of the kind the wire carries (sync and condition join
+/// sync and condition, input and output join input and output).
+fn side_for(g: &Geo, id: usize, p: (f64, f64), ctl: Option<bool>) -> Side {
+    let (cx, cy) = if id == FRAME {
+        (port(g, FRAME, Side::T).0, port(g, FRAME, Side::L).1)
+    } else {
+        let (x, y, w, h) = g.rects[id];
+        (x + w / 2.0, y + h / 2.0)
+    };
+    let (dx, dy) = (p.0 - cx, p.1 - cy);
+    let horiz = if dx < 0.0 { Side::L } else { Side::R };
+    let vert = if dy < 0.0 { Side::T } else { Side::B };
+    match ctl {
+        Some(true) => vert,
+        Some(false) => horiz,
+        None => {
+            let (w, h) = if id == FRAME { (g.w / g.k, g.h / g.k) } else { (g.rects[id].2, g.rects[id].3) };
+            if dx.abs() / w.max(1.0) > dy.abs() / h.max(1.0) { horiz } else { vert }
+        }
+    }
+}
+
+fn wiring_move(x: f64, y: f64) {
+    let s = st();
+    let g = geo(s);
+    let p = ((x - g.ox) / g.k, (y - g.oy) / g.k);
+    let Some(w) = s.wiring.as_mut() else { return };
+    w.at = p;
+    let (own, ctl) = match w.from {
+        From::Port(id, side) => (Some(id), Some(is_ctl_side(side))),
+        From::Bar(gi, _) => (Some(GROUPS[gi].sup), None),
+    };
+    w.to = sup_at(&g, p).filter(|t| Some(*t) != own).map(|t| (t, side_for(&g, t, p, ctl)));
+}
+
+fn note(text: String) {
+    let s = st();
+    s.note = text;
+    host::timer(2600, T_NOTE);
+}
+
+fn wiring_end() {
+    let s = st();
+    let Some(w) = s.wiring.take() else { return };
+    let Some((b, sb)) = w.to else { return };
+    match w.from {
+        From::Bar(gi, m) => {
+            note(format!("Opened {}: wired to {}", GROUPS[gi].members[m].0, name_of(b)));
+            open_member(gi, m);
+        }
+        From::Port(a, sa) => {
+            if a == b {
+                return;
+            }
+            if is_ctl_side(sa) != is_ctl_side(sb) {
+                note("Not joined: sync and condition join sync and condition".to_string());
+                return;
+            }
+            // wiring a super to reset is the reset: it goes back where it started
+            if a == S_RESET || b == S_RESET {
+                let t = if a == S_RESET { b } else { a };
+                if t < NSUP {
+                    s.offs[t] = (0.0, 0.0);
+                    for h in held_by(t) {
+                        s.offs[*h] = (0.0, 0.0);
+                    }
+                    layout_save();
+                }
+                note(format!("Back where it started: {}", name_of(t)));
+                return;
+            }
+            let dup = s.wires.iter().any(|(x, xs, y, ys)| (*x == a && *xs == sa && *y == b && *ys == sb) || (*x == b && *xs == sb && *y == a && *ys == sa));
+            if dup {
+                return;
+            }
+            s.wires.push((a, sa, b, sb));
+            wires_save();
+            let other = |c: usize| if a == c { Some(b) } else if b == c { Some(a) } else { None };
+            let msg = if let Some(t) = other(S_LOCK) {
+                format!("Locked: {} stays where it is while this wire is there", name_of(t))
+            } else if let Some(t) = other(S_CHAIN) {
+                format!("Chained: {} brings what it holds", name_of(t))
+            } else if let Some(t) = other(S_SAVE) {
+                layout_save();
+                format!("Kept: {}", name_of(t))
+            } else {
+                format!("Wired {} to {}", name_of(a), name_of(b))
+            };
+            note(msg);
+        }
+    }
+}
+
+pub fn on_key(key: &str) {
+    let s = st();
+    match key {
+        "Escape" => {
+            s.wiring = None;
+            s.wire_sel = None;
+            host::capture(false);
+        }
+        "Delete" | "Backspace" => {
+            if let Some(i) = s.wire_sel.take() {
+                if i < s.wires.len() {
+                    s.wires.remove(i);
+                    wires_save();
+                    note("Wire removed".to_string());
+                }
+            }
+        }
+        _ => return,
+    }
+    render();
+}
+
 pub fn on_pointer(phase: u32, x: f64, y: f64) {
     let s = st();
+    if s.wiring.is_some() {
+        match phase {
+            0 => wiring_move(x, y),
+            1 => {
+                host::capture(false);
+                wiring_end();
+            }
+            _ => {
+                host::capture(false);
+                s.wiring = None;
+            }
+        }
+        render();
+        return;
+    }
+    let movable = s.drag.as_ref().map(|d| !locked(s, d.id) && d.id >= S_WELCOME).unwrap_or(false);
     let Some(d) = s.drag.as_mut() else {
         host::capture(false);
         return;
@@ -560,8 +935,16 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         0 => {
             if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 5.0 {
                 d.moved = true;
+                // a bar pulled out of its bubble is a wire: wherever it lands, what it stands for opens
+                if let (Some(m), Some(gi)) = (d.member, group_of(d.id)) {
+                    let at = ((x - d.sx) / d.k, (y - d.sy) / d.k);
+                    s.drag = None;
+                    s.wiring = Some(Wiring { from: From::Bar(gi, m as usize), at, to: None });
+                    wiring_move(x, y);
+                    render();
+                    return;
+                }
             }
-            let movable = !s.locked && d.id >= S_WELCOME;
             if d.moved && movable {
                 for (i, (ox, oy)) in d.start.clone() {
                     s.offs[i] = (ox + dx, oy + dy);
@@ -620,7 +1003,7 @@ fn layout_load() {
         let mut xy = p.split(',');
         s.pan = (xy.next().and_then(|v| v.parse().ok()).unwrap_or(0.0), xy.next().and_then(|v| v.parse().ok()).unwrap_or(0.0));
     }
-    s.locked = parts.get(2) != Some(&"0");
+    s.locked = parts.get(2) == Some(&"1");
     s.chained = parts.get(3) != Some(&"0");
 }
 
@@ -639,15 +1022,23 @@ fn activate(id: usize, member: Option<u8>) {
         S_RESET => {
             s.offs = [(0.0, 0.0); NSUP];
             s.pan = (0.0, 0.0);
-            s.locked = true;
+            s.locked = false;
             s.chained = true;
             s.open.clear();
+            s.wires = start_wires();
+            s.wire_sel = None;
             host::store_del("piii:layout");
+            host::store_del("piii:wires");
         }
         S_LEFT => s.pan.0 -= 60.0,
         S_RIGHT => s.pan.0 += 60.0,
         S_UP => s.pan.1 -= 60.0,
         S_DOWN => s.pan.1 += 60.0,
+        S_TITLE => {
+            if st().page != Page::Home {
+                host::go("#/");
+            }
+        }
         S_WELCOME => host::go("#/assess"),
         S_PRIVACY => {
             s.draft = s.consent.unwrap_or([true, true, true]);
