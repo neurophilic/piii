@@ -252,6 +252,7 @@ struct State {
     t2: Tools2,
     quvi: Quvi,
     face: Face,
+    smap: SciMap,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -283,7 +284,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -372,6 +373,7 @@ pub fn start() {
         t2: Tools2::default(),
         quvi: Quvi::default(),
         face: Face::default(),
+        smap: SciMap::default(),
         prog: Prog::default(),
     };
 
@@ -480,6 +482,10 @@ pub fn on_timer(token: u32) {
         }
         T_NOTE => s.note.clear(),
         T_NF => frenzy_tick(),
+        T_MAP => {
+            map_frame();
+            return;
+        }
         T_LIVE => {
             if matches!(s.page, Page::Home | Page::Live) && !s.live.busy {
                 s.live.busy = true;
@@ -2764,6 +2770,7 @@ include!("program.rs");
 include!("tools2.rs");
 include!("quvi.rs");
 include!("facemace.rs");
+include!("sciencemap.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {

@@ -472,7 +472,7 @@ const GROUPS: [Group; 5] = [
         title: "Library",
         members: &[
             ("RiBD", Target::Data("/api/buddy/suggest", "Papers to read, suggested for your profile.")),
-            ("The Global Map of Science", Target::Soon("The map of science and its game drew every assessed field as a graph.")),
+            ("The Global Map of Science", Target::Tool(Tool::Map)),
             ("Whitepaper", Target::Url("/ScholarPi_Whitepaper.pdf")),
             ("Architecture", Target::Tool(Tool::Arch)),
             ("Capabilities", Target::Words(
@@ -1336,7 +1336,10 @@ fn wiring_end() {
     open_member(gi, m);
 }
 
-pub fn on_key(key: &str) {
+pub fn on_key(key: &str) -> bool {
+    if key.starts_with('+') || key.starts_with('-') {
+        return map_key(key);
+    }
     let s = st();
     match key {
         "Escape" => {
@@ -1352,9 +1355,10 @@ pub fn on_key(key: &str) {
                 prog_remove(id);
             }
         }
-        _ => return,
+        _ => return false,
     }
     render();
+    true
 }
 
 pub struct FloatDrag {

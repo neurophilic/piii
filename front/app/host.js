@@ -57,6 +57,17 @@ const host = {
     if (k === "enter") n.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(id, k, n.value || ""); } });
     else if (k === "pdown") n.addEventListener("pointerdown", (e) => { if (e.button === 0) send(id, k, e.clientX + "," + e.clientY); });
     // a double click (left: "dbl", right: "dbl2") on the node itself, not on anything marked data-solid inside it
+    // the pointer over a surface that draws itself (the map): x, y within it, and its width and height
+    else if (k === "mdown" || k === "mmove" || k === "mup" || k === "mwheel") {
+      const ev = { mdown: "pointerdown", mmove: "pointermove", mup: "pointerup", mwheel: "wheel" }[k];
+      n.addEventListener(ev, (e) => {
+        const r = n.getBoundingClientRect(), at = (e.clientX - r.left) + "," + (e.clientY - r.top) + "," + r.width + "," + r.height;
+        if (k === "mwheel") { e.preventDefault(); send(id, k, e.deltaY + "," + at); return; }
+        if (k === "mdown") { if (e.button !== 0 || e.target.closest("button, a, input, select")) return; try { n.setPointerCapture(e.pointerId); } catch (_) {} }
+        send(id, k, at);
+      }, k === "mwheel" ? { passive: false } : undefined);
+      if (k === "mup") n.addEventListener("pointercancel", (e) => { const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top) + "," + r.width + "," + r.height); });
+    }
     else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); send(id, k, e.clientX + "," + e.clientY); } });
     else if (k === "dbl2") {
       let last = 0;
@@ -167,6 +178,23 @@ const ops = {
     files[file].arrayBuffer().then((b) => give(token, new Uint8Array(b), 1, 1)).catch(() => give(token, new Uint8Array(0), 0, 0));
     return "1";
   },
+  // a short tone (the game's sounds): from, to (Hz), ms, wave, gain
+  tone: (a) => {
+    const [f1, f2, ms, type, gain] = a.split("\t");
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!actx) actx = new AC();
+    if (actx.state === "suspended") actx.resume().catch(() => {});
+    const t0 = actx.currentTime, d = (+ms) / 1000, osc = actx.createOscillator(), amp = actx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.setValueAtTime(+f1, t0);
+    if (+f2 && +f2 !== +f1) osc.frequency.exponentialRampToValueAtTime(Math.max(1, +f2), t0 + d);
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime(+gain || 0.05, t0 + 0.012);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    osc.connect(amp); amp.connect(actx.destination); osc.start(t0); osc.stop(t0 + d + 0.02);
+    return "1";
+  },
   // a chosen file, as an address the page can show
   fileurl: (a) => (files[+a] ? URL.createObjectURL(files[+a]) : ""),
   audio: (a) => {
@@ -209,7 +237,11 @@ addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   if (e.key === "Delete" || e.key === "Backspace" || e.key === "Escape") { const [p, l] = put(e.key); W.keyed(p, l); }
+  // keys a game steers with, down (+) and up (−); the program says whether it used them
+  if (STEER.has(e.key)) { const [p, l] = put("+" + e.key); if (W.keyed(p, l) === 1) e.preventDefault(); }
 });
+const STEER = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d", "W", "A", "S", "D", "Escape"]);
+addEventListener("keyup", (e) => { if (STEER.has(e.key)) { const [p, l] = put("-" + e.key); W.keyed(p, l); } });
 addEventListener("pointermove", (e) => { if (capturing) W.pointer(0, e.clientX, e.clientY); });
 addEventListener("pointerup", (e) => { if (capturing) W.pointer(1, e.clientX, e.clientY); });
 addEventListener("pointercancel", (e) => { if (capturing) W.pointer(2, e.clientX, e.clientY); });

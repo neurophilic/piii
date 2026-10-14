@@ -94,9 +94,9 @@ pub extern "C" fn pointer(phase: u32, x: f64, y: f64) {
 
 /// A key that edits the canvas (Delete, Backspace, Escape), pressed outside any field.
 #[unsafe(no_mangle)]
-pub extern "C" fn keyed(kp: *mut u8, kl: usize) {
+pub extern "C" fn keyed(kp: *mut u8, kl: usize) -> u32 {
     let key = take(kp, kl);
-    app::on_key(&key);
+    app::on_key(&key) as u32
 }
 
 /// Bytes the host was asked for (a picture's pixels, w × h; a file's contents): w = 0 means it could not be read.

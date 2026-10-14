@@ -22,6 +22,8 @@ pub enum Tool {
     Quvi,
     // facemace.rs
     Face,
+    // sciencemap.rs
+    Map,
 }
 
 /// What every tool keeps.
@@ -50,6 +52,7 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Ask => ask_view(s),
         Tool::Quvi => quvi_view(s),
         Tool::Face => face_view(s),
+        Tool::Map => map_view(s),
     }
 }
 
@@ -66,6 +69,9 @@ fn tool_load(t: Tool) {
     if t == Tool::Face {
         face_load();
     }
+    if t == Tool::Map {
+        map_load();
+    }
     tools2_load(t);
 }
 
@@ -73,6 +79,8 @@ fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
     let s = st();
     if t == Tool::Md {
         put(&mut s.t.md, v, err);
+    } else if t == Tool::Map {
+        map_apply(what, v, err);
     } else if t == Tool::Face {
         face_apply(v, err);
     } else if t == Tool::Quvi {
@@ -88,6 +96,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Prog => prog_update(a, v),
         Tool::Quvi => quvi_update(a, v),
         Tool::Face => face_update(a, v),
+        Tool::Map => map_update(a, v),
         _ => tools2_update(t, a, v),
     }
 }
