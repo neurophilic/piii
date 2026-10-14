@@ -3030,7 +3030,7 @@ fn ctl_bar(s: &State) -> N {
         .cls("ctl-bar")
         .attr("role", "toolbar")
         .attr("aria-label", "The canvas's controls")
-        .kids([S_SAVE, S_LOCK, S_CHAIN, S_RESET].iter().map(|&id| -> N {
+        .kids([S_LOCK, S_CHAIN, S_RESET].iter().map(|&id| -> N {
             el("button")
                 .attr("type", "button")
                 .cls("sx ctl")

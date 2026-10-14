@@ -181,12 +181,11 @@ type WireT = (usize, usize, Tip);
 type PassT = (usize, Tip, usize, Tip);
 
 /// The start (pitechlab.sasm, `diagram`), in the language's terms.
-const START_WIRES: [WireT; 5] = [
+const START_WIRES: [WireT; 4] = [
     (PAGE_IN, S_SITE, Tip::In),
     (S_TOOLS, S_EXPLORE, Tip::In),
     (S_EXPLORE, S_LIBRARY, Tip::In),
     (S_LAB, S_PROJECT, Tip::In),
-    (S_SAVE, S_TOOLS, Tip::Control),
 ];
 const START_PASSES: [PassT; 4] = [
     (S_SITE, Tip::Control, S_CONNECT, Tip::Control),
@@ -198,7 +197,8 @@ const START_PASSES: [PassT; 4] = [
 /// Supers taken off the canvas (owner, 2026-10-14: the arrows, "delete these icons"; then the one-step button,
 /// "delete this"); the title still moves the view, and Run still runs a program.
 fn is_gone(id: usize) -> bool {
-    matches!(id, S_LEFT | S_UP | S_DOWN | S_RIGHT | S_STEP)
+    // and the save control (owner, 2026-10-14: "delete this icon"): the layout keeps itself after every move
+    matches!(id, S_SAVE | S_LEFT | S_UP | S_DOWN | S_RIGHT | S_STEP)
 }
 
 fn is_ctl_super(id: usize) -> bool {
@@ -689,8 +689,8 @@ fn rect(g: &Geo, id: usize) -> Rect {
 fn geo(s: &State) -> Geo {
     let (w, h) = (host::vw(), host::vh());
     let mut g = geo_zoom(s, w, h, w < 700.0, s.zoom);
-    // save, lock, chain and reset stay where the bar on top shows them, so their wires meet the bar's buttons
-    for (i, id) in [S_SAVE, S_LOCK, S_CHAIN, S_RESET].iter().enumerate() {
+    // lock, chain and reset stay where the bar on top shows them, so their wires meet the bar's buttons
+    for (i, id) in [S_LOCK, S_CHAIN, S_RESET].iter().enumerate() {
         let (x, y, bw, bh) = bar_slot(i, w, h);
         g.rects[*id] = ((x - g.ox) / g.k, (y - g.oy) / g.k, bw / g.k, bh / g.k);
     }
@@ -703,7 +703,7 @@ fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
     let narrow = vw < 700.0;
     let gap = if narrow { 22.0 } else { 30.0 };
     let top = if narrow { vh - 80.0 - bh } else { 10.0 };
-    let left = vw / 2.0 - (4.0 * bw + 3.0 * gap) / 2.0 + i as f64 * (bw + gap);
+    let left = vw / 2.0 - (3.0 * bw + 2.0 * gap) / 2.0 + i as f64 * (bw + gap);
     (left, top, bw, bh)
 }
 
@@ -1782,6 +1782,9 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 }
             } else if is_unode(d.id) {
                 prog_save();
+            } else {
+                // moved (a super, or the view by its title): kept at once, there being no save button
+                layout_save();
             }
             render();
         }
