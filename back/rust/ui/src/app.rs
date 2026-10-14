@@ -491,10 +491,18 @@ pub fn start() {
     }
     layout_load();
     float_load();
-    let had_program = prog_load();
+    prog_load();
     wires_load();
-    if !had_program {
-        example_load(0);
+    // the canvas starts empty (owner, 2026-10-14: "delete all these things"): no example program, and the one kept in
+    // this browser from before is cleared, once
+    if host::store_get("piii:canvas-cleared").is_none() {
+        let s = st();
+        s.prog.nodes.clear();
+        s.prog.sel = None;
+        s.wires.retain(|w| !is_unode(w.0) && !is_unode(w.1));
+        s.passes.retain(|p| !is_unode(p.0) && !is_unode(p.2));
+        prog_save();
+        host::store_set("piii:canvas-cleared", "1");
     }
 
     route();

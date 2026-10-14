@@ -181,24 +181,18 @@ type WireT = (usize, usize, Tip);
 type PassT = (usize, Tip, usize, Tip);
 
 /// The start (pitechlab.sasm, `diagram`), in the language's terms.
-const START_WIRES: [WireT; 4] = [
-    (PAGE_IN, S_SITE, Tip::In),
-    (S_TOOLS, S_EXPLORE, Tip::In),
-    (S_EXPLORE, S_LIBRARY, Tip::In),
-    (S_LAB, S_PROJECT, Tip::In),
-];
-const START_PASSES: [PassT; 4] = [
-    (S_SITE, Tip::Control, S_CONNECT, Tip::Control),
-    (S_SITE, Tip::Control, S_HOLD, Tip::Control),
-    (S_EXPLORE, Tip::Gate, S_LAB, Tip::Control),
-    (S_LIBRARY, Tip::Gate, S_PROJECT, Tip::Control),
-];
+// an empty canvas: no wires to start with
+const START_WIRES: [WireT; 0] = [];
+const START_PASSES: [PassT; 0] = [];
 
 /// Supers taken off the canvas (owner, 2026-10-14: the arrows, "delete these icons"; then the one-step button,
 /// "delete this"); the title still moves the view, and Run still runs a program.
 fn is_gone(id: usize) -> bool {
-    // and the save control (owner, 2026-10-14: "delete this icon"): the layout keeps itself after every move
-    matches!(id, S_SAVE | S_LEFT | S_UP | S_DOWN | S_RIGHT | S_STEP)
+    // and the save control (owner, 2026-10-14: "delete this icon"): the layout keeps itself after every move. Then
+    // everything on the canvas (owner, 2026-10-14: "delete all these things", everything on it): the sidebar reaches
+    // every part of the site, and lock, chain and reset stay, under the bar. What you add (a double click: a sparkle,
+    // a double right click: a super) still goes on it.
+    !matches!(id, S_LOCK | S_CHAIN | S_RESET)
 }
 
 fn is_ctl_super(id: usize) -> bool {
