@@ -1013,6 +1013,9 @@ fn canvas_add(sup: bool, at: &str) {
     let text = if sup { "" } else { SPARKLE };
     let (w, h) = unode_size(text);
     let id = prog_add(text, p.0 - px - w / 2.0, p.1 - py - h / 2.0);
+    // the new one is selected, locked like every super; whatever was unlocked before locks again
+    relock_except(None, None, false);
+    st().sup_pick = None;
     st().prog.sel = Some(id);
     prog_save();
     note(if sup {

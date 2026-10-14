@@ -1678,6 +1678,13 @@ fn begin_drag(id: usize, at: &str) {
         ids.extend_from_slice(held_by(id));
     }
     if is_unode(id) {
+        // selecting a super locks the one selected before (owner, 2026-10-14: "selecting other super locks the
+        // previous super automatically"; "lock system doesn't work properly": supers you drew were left unlocked)
+        if s.prog.sel != Some(id) {
+            relock_except(Some(id), None, false);
+        }
+        let s = st();
+        s.sup_pick = None;
         s.prog.sel = Some(id);
         // a canvas super carries what is drawn inside it
         if how == 0 {
@@ -2074,6 +2081,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                     relock_except(Some(d.id), None, false);
                     let s = st();
                     s.sup_pick = Some(d.id);
+                    s.prog.sel = None;
                     s.float_pick = false;
                     s.win_pick = false;
                 }
