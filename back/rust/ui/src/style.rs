@@ -220,6 +220,7 @@ color:var(--paper);font-size:12px;font-weight:500;white-space:nowrap;pointer-eve
 overflow:hidden;text-overflow:ellipsis}
 .ric:hover .tip,.ric:focus-visible .tip{opacity:1}
 .rsep{flex:none;width:26px;height:1px;background:var(--line)}
+.rgrow{flex:1 1 auto;min-width:8px;min-height:8px}button.ric{font:inherit;padding:0;cursor:pointer}
 .focus.peek .win{left:calc(88px + (100vw - 100px) * .15);right:calc((100vw - 100px) * .15 + 12px);top:15vh;bottom:15vh;box-shadow:0 30px 80px -30px rgba(20,20,30,.45)}
 .focus.peek .scene{z-index:0}
 .win-grip{position:absolute;z-index:3;touch-action:none}.win-grip.r{top:60px;right:0;bottom:22px;width:8px;cursor:ew-resize}.win-grip.b{left:22px;right:22px;bottom:0;height:8px;cursor:ns-resize}.win-grip.c{right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--line2) 50%,var(--line2) 56%,transparent 56%,transparent 70%,var(--line2) 70%,var(--line2) 76%,transparent 76%)}

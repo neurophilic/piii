@@ -646,11 +646,8 @@ fn route() {
     // a window over the page belongs to the page it was opened on
     s.modal = None;
     s.peek = core::mem::take(&mut s.peek_next);
-    // the start page is the Tools super, open (owner, 2026-10-14: "make this the start page"); π goes to the canvas
-    if !href.contains('#') {
-        host::replace_url("#/g/0");
-        return route();
-    }
+    // the start page is the canvas, with the sidebar and the controls over it (owner, 2026-10-14: "this should be the
+    // start page"); before, it was the Tools super, open
     match parts.next().unwrap_or("") {
         "" => s.page = Page::Home,
         "map" => s.page = Page::Map,
@@ -1658,6 +1655,41 @@ fn rail(s: &State) -> N {
             r = r.kid(icon(*p, a));
         }
     }
+    // at the foot of the sidebar: privacy choices, cookies and the API, as icons (owner, 2026-10-14: "move this to
+    // sidebar as icon")
+    let mark = |d: &[&str]| -> N {
+        el("svg:svg")
+            .attr("viewBox", "0 0 24 24")
+            .attr("width", "20")
+            .attr("height", "20")
+            .attr("fill", "none")
+            .attr("stroke", "currentColor")
+            .attr("stroke-width", "1.8")
+            .attr("stroke-linecap", "round")
+            .attr("stroke-linejoin", "round")
+            .attr("aria-hidden", "true")
+            .kids(d.iter().map(|x| -> N { el("svg:path").attr("d", *x).into() }))
+            .into()
+    };
+    let foot = |e: El<Msg>, name: &str, d: &[&str]| -> N {
+        e.cls("ric").attr("aria-label", name).kid(el("span").cls("g").kid(mark(d))).kid(el("span").cls("tip").text(name)).kid(ports()).into()
+    };
+    r = r.kid(el("span").cls("rgrow"));
+    r = r.kid(foot(
+        el("button").attr("type", "button").on("click", Msg::ConsentOpen),
+        "Privacy choices",
+        &["M12 3l8 3v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6z", "M12 10.5v3.5"],
+    ));
+    r = r.kid(foot(
+        el("a").attr("href", "/api/cookies").attr("target", "_blank").attr("rel", "noopener"),
+        "Cookies",
+        &["M21 12a9 9 0 1 1-9-9 3 3 0 0 0 3 3 3 3 0 0 0 3 3 3 3 0 0 0 3 3z", "M8.5 10.5h.01", "M14 15h.01", "M9 15.5h.01"],
+    ));
+    r = r.kid(foot(
+        el("a").attr("href", "/docs").attr("target", "_blank").attr("rel", "noopener"),
+        "API",
+        &["M8 7l-5 5 5 5", "M16 7l5 5-5 5"],
+    ));
     r.into()
 }
 
@@ -1919,10 +1951,8 @@ fn footer() -> N {
         .kid(
             el("div")
                 .cls("foot-in")
-                .kid(el("span").text("Piii Lab · ScholarPi"))
-                .kid(el("button").text("Privacy choices").on("click", Msg::ConsentOpen))
-                .kid(el("a").attr("href", "/api/cookies").attr("target", "_blank").text("Cookies"))
-                .kid(el("a").attr("href", "/docs").attr("target", "_blank").text("API")),
+                // privacy choices, cookies and the API are icons in the sidebar now (owner, 2026-10-14)
+                .kid(el("span").text("Piii Lab · ScholarPi")),
         )
         .into()
 }
@@ -1948,7 +1978,7 @@ fn consent_panel(s: &State) -> N {
         .kid(el("h2").text("Your privacy choices"))
         .kid(
             el("p").cls("hint").style("margin:6px 0 8px").text(
-                "Nothing optional happens until you choose. You can change this any time from the footer.",
+                "Nothing optional happens until you choose. You can change this any time from the shield in the sidebar.",
             ),
         )
         .kid(opt(0, "Count my visit", "A pseudonymous key from your address, for the visitor totals."))
