@@ -78,6 +78,12 @@ const host = {
         if (t - last < 450) { last = 0; send(id, k, e.clientX + "," + e.clientY); } else last = t;
       });
     }
+    // a key typed into something that is not a field (the HAL-OS screen): it goes only there
+    else if (k === "key") n.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const key = e.key;
+      if (key.length === 1 || key === "Enter" || key === "Backspace" || key === "Escape" || key === "Tab") { e.preventDefault(); e.stopPropagation(); send(id, k, key); }
+    });
     else if (k === "files") n.addEventListener("change", () => { const v = fileList(n.files); n.value = ""; send(id, k, v); });
     else if (k === "drop") {
       n.addEventListener("dragover", (e) => e.preventDefault());
@@ -161,6 +167,13 @@ const ops = {
     if (!w || !w.request) return null;
     const back = (o) => give(+token, enc.encode(JSON.stringify(o)), 1, 1);
     w.request({ method, params: JSON.parse(params || "[]") }).then((r) => back({ ok: r ?? null }), (e) => back({ err: (e && e.code) || 0, msg: String((e && e.message) || e) }));
+    return "1";
+  },
+  // RGBA bytes in the program's memory, onto the canvas a selector names: selector, pointer, length, width, height
+  blit: (a) => {
+    const [sel, p, l, w, h] = a.split("\t"), cv = document.querySelector(sel);
+    if (!cv) return null;
+    cv.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(W.memory.buffer, +p, +l).slice(), +w, +h), 0, 0);
     return "1";
   },
   copy: (a) => { navigator.clipboard && navigator.clipboard.writeText(a).catch(() => {}); return "1"; },

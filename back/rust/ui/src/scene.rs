@@ -491,7 +491,7 @@ const GROUPS: [Group; 5] = [
         title: "Lab",
         members: &[
             ("QuVI", Target::Tool(Tool::Quvi)),
-            ("HAL-OS", Target::Soon("HAL-OS booted an x86 machine in your browser.")),
+            ("HAL-OS", Target::Tool(Tool::Hal)),
             ("Unigyro", Target::Tool(Tool::Unigyro)),
             ("Private projects", Target::Tool(Tool::Private)),
             ("Permission requests", Target::Tool(Tool::Requests)),

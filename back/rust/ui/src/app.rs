@@ -260,6 +260,7 @@ struct State {
     owner: Owner,
     ledger: Ledger,
     learn: Learn,
+    hal: Hal,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -291,7 +292,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS, LEARN_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS, LEARN_CSS, HAL_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -388,6 +389,7 @@ pub fn start() {
         owner: Owner::default(),
         ledger: Ledger::default(),
         learn: Learn::default(),
+        hal: Hal::default(),
         prog: Prog::default(),
     };
 
@@ -500,6 +502,11 @@ pub fn on_timer(token: u32) {
         T_NOTE => s.note.clear(),
         T_NF => frenzy_tick(),
         T_JOBS => jobs_tick(),
+        T_HAL => {
+            if !hal_tick() {
+                return;
+            }
+        }
         T_LOGS => logs_tick(),
         T_MAP => {
             map_frame();
@@ -530,6 +537,7 @@ fn render() {
     if let Some(d) = DOM.get().as_mut() {
         d.render(view);
     }
+    hal_paint();
     let s = st();
     let t = match s.page {
         Page::Home => "piii lab",
@@ -2835,6 +2843,7 @@ include!("owner.rs");
 include!("ledger.rs");
 include!("help.rs");
 include!("learn.rs");
+include!("hal.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {

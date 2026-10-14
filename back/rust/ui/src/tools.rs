@@ -40,6 +40,8 @@ pub enum Tool {
     // learn.rs
     Learn,
     Whitepaper,
+    // hal.rs
+    Hal,
 }
 
 /// What every tool keeps.
@@ -80,6 +82,7 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Donate => donate_view(s),
         Tool::Learn => learn_view(s),
         Tool::Whitepaper => paper_doc_view(),
+        Tool::Hal => hal_view(s),
     }
 }
 
@@ -116,6 +119,9 @@ fn tool_load(t: Tool) {
     }
     if t == Tool::Learn {
         learn_load();
+    }
+    if t == Tool::Hal {
+        hal_load();
     }
     tools2_load(t);
 }
@@ -160,6 +166,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Bug | Tool::Owner => owner_update(t, a, v),
         Tool::Ledger | Tool::Board | Tool::Donate => ledger_update(t, a, v),
         Tool::Learn => learn_update(a, v),
+        Tool::Hal => hal_update(a, v),
         _ => tools2_update(t, a, v),
     }
 }
