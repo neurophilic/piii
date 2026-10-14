@@ -807,10 +807,10 @@ fn float_size() -> (f64, f64) {
     let (vw, vh) = (host::vw(), host::vh());
     if vw < 700.0 {
         let w = vw - 24.0;
-        (w, (w * 0.5).min(vh * 0.3))
+        (w, (w * 0.5).min(vh * if st().float_big { 0.55 } else { 0.3 }))
     } else {
-        let w = (vw * 0.26).clamp(260.0, 420.0);
-        (w, w * 0.625)
+        let w = if st().float_big { (vw * 0.5).clamp(420.0, 960.0).min(vw - 120.0) } else { (vw * 0.26).clamp(260.0, 420.0) };
+        (w, (w * 0.625).min(vh - 60.0))
     }
 }
 
@@ -1407,6 +1407,7 @@ fn float_begin(at: &str) {
 }
 
 pub fn float_load() {
+    st().float_big = host::store_get("piii:float-big").as_deref() == Some("1");
     let Some(v) = host::store_get("piii:float") else { return };
     let mut it = v.split(',');
     if let (Some(Ok(l)), Some(Ok(t))) = (it.next().map(|x| x.parse::<f64>()), it.next().map(|x| x.parse::<f64>())) {
@@ -1432,7 +1433,16 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             }
             _ => {
                 host::capture(false);
+                let moved = s.float_drag.as_ref().map(|d| d.moved).unwrap_or(true);
                 s.float_drag = None;
+                if !moved && phase == 1 {
+                    // a click, not a drag: the canvas grows, or goes back to its small size
+                    s.float_big = !s.float_big;
+                    host::store_set("piii:float-big", if s.float_big { "1" } else { "0" });
+                    if let Some(p) = s.float_at {
+                        s.float_at = Some(float_clamp(p));
+                    }
+                }
                 if let Some((l, t)) = s.float_at {
                     host::store_set("piii:float", &format!("{:.0},{:.0}", l, t));
                 }

@@ -243,6 +243,8 @@ struct State {
     /// where the floating canvas was dragged to (left, top in px), and a drag of it under way
     float_at: Option<(f64, f64)>,
     float_drag: Option<FloatDrag>,
+    /// the floating canvas grown by a click (owner, 2026-10-14: "clicking grows the canvas")
+    float_big: bool,
     pend_at: (f64, f64),
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
@@ -375,6 +377,7 @@ pub fn start() {
         held_port: None,
         float_at: None,
         float_drag: None,
+        float_big: false,
         pend_at: (0.0, 0.0),
         wire_sel: None,
         wiring: None,
