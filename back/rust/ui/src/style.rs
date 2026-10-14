@@ -366,6 +366,8 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+/* no scroll bar anywhere, ever; everything still scrolls (owner, 2026-10-14) */
+*{scrollbar-width:none;-ms-overflow-style:none}*::-webkit-scrollbar{display:none;width:0;height:0}
 .wire-note.page-note{position:fixed;left:50%;right:auto;bottom:24px;transform:translateX(-50%);z-index:2147483001;max-width:calc(100vw - 32px)}
 @media (max-width:699px){.wire-note.page-note{bottom:auto;top:12px}}
 .stage>.sx.under-bar{visibility:hidden}
