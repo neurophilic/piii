@@ -48,7 +48,10 @@ const S_EXAMPLES: usize = 21;
 const S_RUN: usize = 22;
 const S_STEP: usize = 23;
 const S_CLEAR: usize = 24;
-const NSUP: usize = 25;
+/// The sidebar's Insights group (owner, 2026-10-14: "put this in a new icon sidebar"): live, analytics, performance and
+/// minting difficulty.
+const S_INSIGHT: usize = 25;
+const NSUP: usize = 26;
 
 type Rect = (f64, f64, f64, f64);
 
@@ -82,6 +85,7 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
                 (896.0, 9.0, 50.0, 48.0),
                 (980.0, 9.0, 50.0, 48.0),
                 (980.0, 9.0, 50.0, 48.0),
+                (20.0, 334.0, 44.0, 44.0),
             ],
             1440.0,
             900.0,
@@ -115,6 +119,7 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
                 (240.0, 1460.0, 50.0, 48.0),
                 (324.0, 1460.0, 50.0, 48.0),
                 (324.0, 1460.0, 50.0, 48.0),
+                (0.0, 1460.0, 50.0, 48.0),
             ],
             700.0,
             1515.0,
@@ -204,7 +209,7 @@ const BAR: [usize; 5] = [S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR];
 
 /// The sidebar's icons, top to bottom (π, the five groups, the map; then privacy, cookies and the API), stand on
 /// supers of their own that sit pinned under them, so they are wired like anything else (owner, 2026-10-14).
-const RAIL: [usize; 10] = [S_TITLE, S_TOOLS, S_EXPLORE, S_LIBRARY, S_LAB, S_CONNECT, S_PROJECT, S_PRIVACY, S_WELCOME, S_HOLD];
+const RAIL: [usize; 11] = [S_TITLE, S_TOOLS, S_EXPLORE, S_LIBRARY, S_LAB, S_CONNECT, S_INSIGHT, S_PROJECT, S_PRIVACY, S_WELCOME, S_HOLD];
 
 /// Which sidebar icon a super stands under, if any.
 fn rail_pin(id: usize) -> Option<usize> {
@@ -216,8 +221,8 @@ fn rail_slot(i: usize, vh: f64) -> (f64, f64, f64, f64) {
     let (x, size, gap) = (20.0, 44.0, 8.0);
     let y = match i {
         0 => 22.0,
-        1..=6 => 22.0 + i as f64 * (size + gap),
-        _ => vh - 22.0 - size - (9 - i) as f64 * (size + gap),
+        1..=7 => 22.0 + i as f64 * (size + gap),
+        _ => vh - 22.0 - size - (10 - i) as f64 * (size + gap),
     };
     (x, y, size, size)
 }
@@ -652,7 +657,7 @@ struct Group {
     members: &'static [(&'static str, Target)],
 }
 
-const GROUPS: [Group; 5] = [
+const GROUPS: [Group; 6] = [
     Group {
         sup: S_TOOLS,
         title: "Tools",
@@ -660,28 +665,26 @@ const GROUPS: [Group; 5] = [
             ("Assess Manuscripts [Pi]", Target::Hash("#/assess")),
             ("Assist Diagnosis [Intern]", Target::Tool(Tool::Intern)),
             ("FaceMace", Target::Tool(Tool::Face)),
+            // moved here from Explore (owner, 2026-10-14: "put super AI in tools")
+            ("Super AI", Target::Tool(Tool::Ask)),
+            // from the Library (owner, 2026-10-14: "put RiBD in tools")
+            ("RiBD", Target::Tool(Tool::Buddy)),
         ],
     },
     Group {
         sup: S_EXPLORE,
         title: "Explore",
         members: &[
-            ("Live", Target::Hash("#/live")),
             ("The journal", Target::Hash("#/explore/journal")),
             ("Leaderboards", Target::Tool(Tool::Board)),
-            ("Super AI", Target::Tool(Tool::Ask)),
             ("Proof-of-Research Ledger Explorer", Target::Tool(Tool::Ledger)),
             ("Recent assessments", Target::Tool(Tool::Recent)),
-            ("Analytics", Target::Tool(Tool::Analytics)),
-            ("Performance", Target::Tool(Tool::Perf)),
-            ("Minting Difficulty", Target::Hash("#/library")),
         ],
     },
     Group {
         sup: S_LIBRARY,
         title: "Library",
         members: &[
-            ("RiBD", Target::Tool(Tool::Buddy)),
             ("The Global Map of Science", Target::Tool(Tool::Map)),
             ("Whitepaper", Target::Tool(Tool::Whitepaper)),
             ("Architecture", Target::Tool(Tool::Arch)),
@@ -691,9 +694,9 @@ const GROUPS: [Group; 5] = [
                  ledger. PiEn learns how the site is used. Super AI joins them, with Llama, Mistral, Qwen, Gemini and \
                  DeepSeek as independent jurors and a judge over them.",
             )),
-            ("Neuro Frenzy", Target::Tool(Tool::Frenzy)),
-            ("MD", Target::Tool(Tool::Md)),
             ("Learn to program", Target::Tool(Tool::Learn)),
+            // from Connect (owner, 2026-10-14: "put assessment results in the library")
+            ("Assessment results", Target::Hash("#/assess")),
         ],
     },
     Group {
@@ -703,8 +706,9 @@ const GROUPS: [Group; 5] = [
             ("QuVI", Target::Tool(Tool::Quvi)),
             ("HAL-OS", Target::Tool(Tool::Hal)),
             ("Unigyro", Target::Tool(Tool::Unigyro)),
-            ("Private projects", Target::Tool(Tool::Private)),
-            ("Permission requests", Target::Tool(Tool::Requests)),
+            // from the Library (owner, 2026-10-14: "put Neurofrenzy and MD in lab")
+            ("Neuro Frenzy", Target::Tool(Tool::Frenzy)),
+            ("MD", Target::Tool(Tool::Md)),
         ],
     },
     Group {
@@ -715,8 +719,10 @@ const GROUPS: [Group; 5] = [
             ("Your assessments", Target::Hash("#/account")),
             ("Research profile", Target::Tool(Tool::Profile)),
             ("piQ held for you", Target::Hash("#/account")),
-            ("Assessment results", Target::Hash("#/assess")),
             ("Owner console", Target::Tool(Tool::Owner)),
+            // from the Lab (owner, 2026-10-14: "put these in account")
+            ("Private projects", Target::Tool(Tool::Private)),
+            ("Permission requests", Target::Tool(Tool::Requests)),
             ("Why sign in", Target::Words(
                 "Signing in with ORCID links your assessments to you: they stay in your history, and the piQ they earn \
                  is minted to you instead of held in escrow. Anonymous visitors have a short free trial.",
@@ -728,6 +734,16 @@ const GROUPS: [Group; 5] = [
             ("Support Pi", Target::Tool(Tool::Donate)),
             ("Contact us", Target::Tool(Tool::Bug)),
             ("GitHub", Target::Url("https://github.com/ex-tern/pi")),
+        ],
+    },
+    Group {
+        sup: S_INSIGHT,
+        title: "Insights",
+        members: &[
+            ("Analytics", Target::Tool(Tool::Analytics)),
+            ("Performance", Target::Tool(Tool::Perf)),
+            ("Minting Difficulty", Target::Hash("#/library")),
+            ("Live", Target::Hash("#/live")),
         ],
     },
 ];
@@ -978,6 +994,7 @@ fn sup_label(id: usize) -> &'static str {
         S_EXPLORE => "Explore",
         S_LIBRARY => "Library",
         S_LAB => "Lab",
+        S_INSIGHT => "Insights",
         S_PROJECT => "Project",
         _ => "",
     }
@@ -2012,8 +2029,17 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             } else if !d.moved && d.id == S_RESET {
                 // reset is held, not clicked: let go early and nothing happens
                 reset_hold_end(true);
+            } else if !d.moved && is_unode(d.id) && d.free && s.last_tap.0 == d.id && host::now() - s.last_tap.2 < 450.0 {
+                // a super or sparkle of yours, unlocked and double clicked: gone, with its wires (owner, 2026-10-14)
+                s.last_tap = (usize::MAX, None, 0.0);
+                s.free.retain(|i| *i != d.id);
+                prog_remove(d.id);
+                layout_save();
             } else if !d.moved && (is_ctl_super(d.id) || matches!(d.id, S_TITLE | S_RUN | S_CLEAR) || is_unode(d.id)) {
                 // the controls are buttons: one click does it
+                if is_unode(d.id) {
+                    s.last_tap = (d.id, None, host::now());
+                }
                 activate(d.id, d.member);
             } else if !d.moved {
                 // anything else opens on a double click
@@ -2217,7 +2243,7 @@ fn activate(id: usize, member: Option<u8>) {
             s.consent_open = true;
         }
         S_PROJECT => host::go("#/map"),
-        S_TOOLS | S_EXPLORE | S_LIBRARY | S_LAB | S_CONNECT => {
+        S_TOOLS | S_EXPLORE | S_LIBRARY | S_LAB | S_CONNECT | S_INSIGHT => {
             let gi = group_of(id).unwrap_or(0);
             match member {
                 Some(m) => open_member(gi, m as usize),

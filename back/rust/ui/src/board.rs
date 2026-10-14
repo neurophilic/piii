@@ -49,7 +49,9 @@ const USW: f64 = 88.0;
 const USH: f64 = 88.0;
 
 fn board_key(gi: usize) -> String {
-    format!("piii:board:{}", gi)
+    // Tools, Explore, the Library, the Lab and Connect changed members (2026-10-14): their old layouts would put supers
+    // in each other's places
+    if gi <= 4 { format!("piii:board:{}:b", gi) } else { format!("piii:board:{}", gi) }
 }
 
 fn board(gi: usize) -> &'static mut Board {
@@ -336,12 +338,15 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             if moved {
                 board_save(gi);
             } else if phase == 1 && how == 0 && node >= board(gi).pos.len() {
-                // a super of your own: a double click shrinks it when it is an unlocked canvas; a click selects it
+                // a super or sparkle of your own: a double click deletes it once unlocked (owner, 2026-10-14: "double
+                // clicking a super or sparkle deletes it if it's unlocked"); a click selects it
                 let now = host::now();
                 let s = st();
-                if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 && board_shrinkable(board(gi), node) {
+                if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 && bnode_free(board(gi), node) {
                     s.last_tap = (usize::MAX, None, 0.0);
-                    board_shrink(gi, node);
+                    board_remove(gi, node);
+                    render();
+                    return true;
                 } else {
                     s.last_tap = (10_000 + node, None, now);
                 }
@@ -573,6 +578,26 @@ fn board_reset(gi: usize) {
     b.loaded = false;
     b.sizes.clear();
     board_load(gi, b);
+}
+
+/// Takes a super or sparkle of your own off a board, with its wires; the ones after it move down a place.
+fn board_remove(gi: usize, node: usize) {
+    let b = board(gi);
+    let n = b.pos.len();
+    if node < n || node - n >= b.extra.len() {
+        return;
+    }
+    b.extra.remove(node - n);
+    let shift = |i: usize| if i > node { i - 1 } else { i };
+    b.links = b.links.iter().filter(|l| l.0 != node && l.1 != node).map(|l| (shift(l.0), shift(l.1), l.2)).collect();
+    if node < b.sizes.len() {
+        b.sizes.remove(node);
+    }
+    b.free = b.free.iter().filter(|i| **i != node).map(|i| shift(*i)).collect();
+    b.picked = None;
+    b.sel = None;
+    b.held = None;
+    board_save(gi);
 }
 
 /// Delete or Escape on a board. True: the board used it.

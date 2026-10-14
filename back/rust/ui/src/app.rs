@@ -1788,6 +1788,7 @@ fn mark_of(page: Page, name: &str) -> N {
             S_TOOLS => &["M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"],
             S_EXPLORE => &["M10.5 4a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13z", "M20 20l-4.8-4.8"],
             S_LIBRARY => &["M4 4h5v16H4z", "M9 4h5v16H9z", "M14.5 6.2l4.3-1.2 3.4 13.5-4.3 1.2z"],
+            S_INSIGHT => &["M3 12h4l3-7 4 14 3-7h4"],
             S_LAB => &["M9 3h6", "M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3", "M7 15h10"],
             _ => &["M12 4a4 4 0 1 1 0 8a4 4 0 1 1 0-8z", "M4 21c1.6-4 4.6-6 8-6s6.4 2 8 6"],
         },
@@ -1834,8 +1835,8 @@ fn rail(s: &State) -> N {
             .kid(el("span").cls("g").kid(mark_of(page, &name)))
             .kid(el("span").cls("tip").text(name))
             .kid(tips(match page {
-                Page::Group(g) if (g as usize) < 5 => Some(RAIL[1 + g as usize]),
-                Page::Map => Some(RAIL[6]),
+                Page::Group(g) if (g as usize) < GROUPS.len() => Some(RAIL[1 + g as usize]),
+                Page::Map => Some(RAIL[7]),
                 _ => None,
             }))
             .into()
@@ -1868,7 +1869,7 @@ fn rail(s: &State) -> N {
             .kid(tips(Some(RAIL[0]))),
     );
     // no rule under π (owner, 2026-10-14: "delete this divider")
-    let tops = [Page::Group(0), Page::Group(1), Page::Group(2), Page::Group(3), Page::Group(4), Page::Map];
+    let tops = [Page::Group(0), Page::Group(1), Page::Group(2), Page::Group(3), Page::Group(4), Page::Group(5), Page::Map];
     for p in tops {
         r = r.kid(icon(p, ""));
     }
@@ -1930,19 +1931,19 @@ fn rail(s: &State) -> N {
         el("button").attr("type", "button").on("click", Msg::ConsentOpen),
         "Privacy choices",
         &["M12 3l8 3v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6z", "M12 10.5v3.5"],
-        RAIL[7],
+        RAIL[8],
     ));
     f = f.kid(foot(
         el("button").attr("type", "button").on("click", Msg::T(Tool::Ledger, 50, String::new())),
         "Cookies",
         &["M21 12a9 9 0 1 1-9-9 3 3 0 0 0 3 3 3 3 0 0 0 3 3 3 3 0 0 0 3 3z", "M8.5 10.5h.01", "M14 15h.01", "M9 15.5h.01"],
-        RAIL[8],
+        RAIL[9],
     ));
     f = f.kid(foot(
         el("button").attr("type", "button").on("click", Msg::T(Tool::Ledger, 51, String::new())),
         "API",
         &["M8 7l-5 5 5 5", "M16 7l5 5-5 5"],
-        RAIL[9],
+        RAIL[10],
     ));
     el("nav").cls("rail").attr("aria-label", "Everything else").kid(r).kid(f).into()
 }
