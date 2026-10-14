@@ -278,7 +278,7 @@ font-size:20px;line-height:1;color:var(--muted)}
 .ports-svg .port.on .mark{fill:var(--accent);stroke:var(--accent)}
 .ports-svg .port.target .mark{stroke:var(--accent);stroke-width:3.2;fill:#eef0fe}
 .scene.floating .ports-svg .port{pointer-events:none}
-.ports-svg .port .mark{transition:opacity .15s}.ports-svg .port:hover .mark,.wiring .ports-svg .port .mark,.board-ports.holding .port .mark{opacity:1}
+.ports-svg .port .mark{transition:opacity .15s}.ports-svg .port:not(.wired):not(.on):not(.target) .mark{opacity:0}.ports-svg .port:hover .mark,.wiring .ports-svg .port .mark,.board-ports.holding .port .mark{opacity:1}
 .wires .ports,.map .ports{fill:var(--ink)}
 .sx{position:absolute;background:var(--card);border:1px solid #9a9a95;box-sizing:border-box;cursor:grab;overflow:hidden;
 box-shadow:0 10px 24px -18px rgba(25,25,25,.35)}
@@ -374,7 +374,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .bar-pts{pointer-events:none}.bar-pts .pt{pointer-events:auto;cursor:pointer}
 .hold-face{position:absolute;inset:6px;z-index:1;cursor:pointer;touch-action:none}
 .stage>.sx.ctl{z-index:7}
-.sx.ctl.holding{background:linear-gradient(var(--accent-soft),var(--accent-soft)) no-repeat left bottom/100% 0%;animation:holdfill .9s linear forwards}
+.ric.ctlb.holding,.sx.ctl.holding{background:linear-gradient(var(--accent-soft),var(--accent-soft)) no-repeat left bottom/100% 0%;animation:holdfill .9s linear forwards}
 @keyframes holdfill{to{background-size:100% 100%}}
 .sx.icon{display:grid!important;place-items:center;padding:0!important;background:#fff;overflow:hidden}
 .icon-g{display:grid;place-items:center;width:100%;height:100%;font:600 30px/1 'Geist',system-ui,sans-serif;color:var(--ink);letter-spacing:.02em}

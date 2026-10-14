@@ -211,6 +211,45 @@ fn win_default() -> (f64, f64) {
 
 fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
     let s = st();
+    if let Some((gi, x0, y0, bx, by)) = s.bwire {
+        let at = (bx + x - x0, by + y - y0);
+        if phase == 0 {
+            board(gi).at = Some(at);
+        } else {
+            host::capture(false);
+            s.bwire = None;
+            if (x - x0).abs() + (y - y0).abs() > 6.0 {
+                let b = board(gi);
+                let from = b.held.unwrap_or(usize::MAX);
+                let total = b.pos.len() + b.extra.len();
+                let mut best: Option<(f64, usize, u8)> = None;
+                for n in 0..total {
+                    for t in [0u8, 2, 3] {
+                        if n == from {
+                            continue;
+                        }
+                        let (tx, ty) = btip(b, n, t);
+                        let (dx, dy) = (tx - at.0, ty - at.1);
+                        let d = (dx * dx + dy * dy).sqrt_c();
+                        if d <= SNAP && best.map(|q| d < q.0).unwrap_or(true) {
+                            best = Some((d, n, t));
+                        }
+                    }
+                }
+                match best {
+                    Some((_, n, t)) => board_tip(gi, n, t),
+                    None => {
+                        let b = board(gi);
+                        b.held = None;
+                        b.note = "Let go on a tip, or near one, to wire it.".into();
+                    }
+                }
+                s.port_press = host::now();
+            }
+        }
+        render();
+        return true;
+    }
     if let Some((sx, sy, w0, h0, mode)) = s.win_drag {
         if phase == 0 {
             // no larger than the screen beside the rail holds, so every edge stays in view
@@ -274,6 +313,7 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
                 } else {
                     s.last_tap = (10_000 + node, None, now);
                 }
+                relock_except(None, Some(node), false);
                 board(gi).picked = Some(node);
                 let s = st();
                 s.float_pick = false;
@@ -292,6 +332,8 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
                     board_open(gi, node);
                 } else {
                     s.last_tap = (10_000 + node, None, now);
+                    relock_except(None, Some(node), false);
+                    let s = st();
                     s.float_pick = false;
                     s.win_pick = false;
                     board(gi).picked = Some(node);
@@ -305,7 +347,12 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
 
 fn board_update(a: u16, v: String) {
     if a == 50 {
-        canvas_zoom(&v);
+        // the wheel or two fingers on the canvas pan it; zooming is a pinch or Ctrl/⌘ and the wheel (owner, 2026-10-14)
+        canvas_wheel(&v);
+        return;
+    }
+    if a == 52 {
+        canvas_pan_begin(&v);
         return;
     }
     // the open window: its corner resizes it, and so does the middle button on its head
@@ -318,6 +365,7 @@ fn board_update(a: u16, v: String) {
     }
     if a == 65 {
         // a click on the window's head selects it, for the lock
+        relock_except(None, None, true);
         let s = st();
         s.win_pick = true;
         s.float_pick = false;
@@ -378,6 +426,19 @@ fn board_update(a: u16, v: String) {
     let nums: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
     match a {
         // 2000 + k: the text in the k-th super of your own
+        n if n >= 6000 => {
+            let (node, tip) = (((n - 6000) / 4) as usize, ((n - 6000) % 4) as u8);
+            let (x, y) = (nums.first().copied().unwrap_or(0.0), nums.get(1).copied().unwrap_or(0.0));
+            st().port_press = host::now();
+            let held = board(gi).held.is_some();
+            board_tip(gi, node, tip);
+            if !held && board(gi).held == Some(node) {
+                // the wire follows the drag; let go on, or near, a tip to wire it
+                let (bx, by) = btip(board(gi), node, tip);
+                st().bwire = Some((gi, x, y, bx, by));
+                host::capture(true);
+            }
+        }
         n if n >= 2000 => {
             let b = board(gi);
             if let Some(e) = b.extra.get_mut((n - 2000) as usize) {
@@ -403,33 +464,9 @@ fn board_update(a: u16, v: String) {
         }
         // a tip: node,tip
         2 => {
-            let (node, tip) = (nums.first().copied().unwrap_or(0.0) as usize, nums.get(1).copied().unwrap_or(0.0) as u8);
-            let b = board(gi);
-            b.sel = None;
-            match b.held {
-                None if tip == 1 => {
-                    b.held = Some(node);
-                    b.at = None;
-                    b.note = "Now click a tip of another super: in, control or gate.".into();
-                }
-                None => b.note = "A wire starts at an out (the filled tip on the right).".into(),
-                Some(from) => {
-                    b.held = None;
-                    if tip == 1 {
-                        b.held = Some(node);
-                    b.at = None;
-                    } else if from == node {
-                        b.note = "A super does not wire into itself.".into();
-                    } else if board_reaches(b, node, from) {
-                        b.note = "That would make a loop.".into();
-                    } else if b.links.iter().any(|l| l.0 == from && l.1 == node && l.2 == tip) {
-                        b.note = "Already wired.".into();
-                    } else {
-                        b.links.push((from, node, tip));
-                        b.note.clear();
-                        board_save(gi);
-                    }
-                }
+            if host::now() - st().port_press > 500.0 {
+                let (node, tip) = (nums.first().copied().unwrap_or(0.0) as usize, nums.get(1).copied().unwrap_or(0.0) as u8);
+                board_tip(gi, node, tip);
             }
         }
         3 => {
@@ -455,6 +492,38 @@ fn board_update(a: u16, v: String) {
         7 => board_reset(gi),
         _ => {}
     }
+}
+
+/// A tip of a super on its canvas, clicked or let go on: start a wire at an out, or finish the held one here.
+fn board_tip(gi: usize, node: usize, tip: u8) {
+    let b = board(gi);
+    b.sel = None;
+    match b.held {
+        None if tip == 1 => {
+            b.held = Some(node);
+            b.at = None;
+            b.note = "Now click a tip of another super: in, control or gate.".into();
+        }
+        None => b.note = "A wire starts at an out (the filled tip on the right).".into(),
+        Some(from) => {
+            b.held = None;
+            if tip == 1 {
+                b.held = Some(node);
+            b.at = None;
+            } else if from == node {
+                b.note = "A super does not wire into itself.".into();
+            } else if board_reaches(b, node, from) {
+                b.note = "That would make a loop.".into();
+            } else if b.links.iter().any(|l| l.0 == from && l.1 == node && l.2 == tip) {
+                b.note = "Already wired.".into();
+            } else {
+                b.links.push((from, node, tip));
+                b.note.clear();
+                board_save(gi);
+            }
+        }
+    }
+
 }
 
 fn board_reset(gi: usize) {
@@ -538,8 +607,9 @@ fn group_board(gi: usize) -> N {
                     .attr("data-stop", "1")
                     .attr("data-solid", "1")
                     .on("click", Msg::T(Tool::Grid, 2, format!("{},{}", i, t)))
-                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", "14"))
-                    .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, 10.0)))
+                    .on("pdown", Msg::TV(Tool::Grid, 6000 + (i * 4) as u16 + t as u16))
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", "24"))
+                    .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, 7.0)))
                     .kid(el("svg:title").text(match t { 0 => "in", 1 => "out: click, then click a tip of another super", 2 => "control", _ => "gate" })),
             );
         }
@@ -580,7 +650,7 @@ fn group_board(gi: usize) -> N {
         let (x, y, bw, bh) = bnode(&b, i);
         let base = el("div").cls("bnode").cls_if(b.picked == Some(i), "picked").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
         nodes.push(if *kind == 0 {
-            base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-30 -30 60 60").attr("width", "60").attr("height", "60").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 26.0)))).into()
+            base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-40 -40 80 80").attr("width", "80").attr("height", "80").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 36.0)))).into()
         } else {
             base.cls("buser").kid(
                 el("input")
@@ -620,7 +690,7 @@ const BOARD_CSS: &str = "\
 .board .bnode{position:absolute;z-index:2;box-sizing:border-box;cursor:grab;touch-action:none}\
 .board .bnode.member{min-height:0}\
 .board .board-ports{position:absolute;left:0;top:0;z-index:4;overflow:visible;pointer-events:none}\
-.board .bspark svg path{fill:var(--paper);stroke:var(--ink);stroke-width:1.6}\
+.board .bspark svg path{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}.bspark.picked svg path{stroke:var(--accent)}\
 .board .buser{display:flex;align-items:center;padding:8px;background:#fff;border:1.6px solid var(--ink);border-radius:18px}\
 .board .buser-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:inherit;font-size:15px;text-align:center;outline:none;cursor:text}.board .buser-in:focus{border-color:var(--accent)}\
 .board-bar{margin-top:10px;justify-content:space-between}\

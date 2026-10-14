@@ -87,6 +87,8 @@ enum Msg {
     WireSel(u8),
     WireDel(u8),
     Port(usize, u8),
+    /// a press on a tip (x, y, how): a wire starts, and follows the drag to where it is let go
+    PortDown(usize, u8, String),
     /// A tool's action, with what was typed or chosen (tools.rs).
     T(Tool, u16, String),
     /// A tool's action that takes in the event's value (a field's text).
@@ -97,6 +99,7 @@ impl crate::dom::Fill for Msg {
     fn fill(self, v: String) -> Self {
         match self {
             Msg::PDown(id, _) => Msg::PDown(id, v),
+            Msg::PortDown(id, t, _) => Msg::PortDown(id, t, v),
             Msg::FloatDown(_) => Msg::FloatDown(v),
             Msg::Dbl(b, _) => Msg::Dbl(b, v),
             Msg::TV(t, a) => Msg::T(t, a, v),
@@ -271,6 +274,16 @@ struct State {
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
     note: String,
+    /// the open page's zoom (the canvas has its own)
+    pzoom: f64,
+    /// a pan of the canvas by dragging its bare background: press x, y and the pan then
+    pan_drag: Option<(f64, f64, (f64, f64))>,
+    /// a wire dragged out of a tip on the canvas: where the press began; and when a tip was last pressed (the click that
+    /// follows a press is the press's own, not a second one)
+    port_drag: Option<(f64, f64)>,
+    port_press: f64,
+    /// a wire dragged out of a tip on a super's canvas: board, press x, y, and the tip's place on the board
+    bwire: Option<(usize, f64, f64, f64, f64)>,
     /// the reset button held down since this time; held long enough, it resets (owner, 2026-10-14: "holding this button
     /// resets it")
     reset_hold: Option<f64>,
@@ -424,6 +437,11 @@ pub fn start() {
         wire_sel: None,
         wiring: None,
         note: String::new(),
+        pzoom: 1.0,
+        pan_drag: None,
+        port_drag: None,
+        port_press: 0.0,
+        bwire: None,
         reset_hold: None,
         reset_cap: false,
         note_at: 0.0,
@@ -491,6 +509,7 @@ pub fn start() {
     }
     layout_load();
     float_load();
+    st().pzoom = host::store_get("piii:pzoom").and_then(|v| v.parse::<f64>().ok()).filter(|z| z.is_finite() && *z > 0.0).unwrap_or(1.0);
     prog_load();
     wires_load();
     // the canvas starts empty (owner, 2026-10-14: "delete all these things"): no example program, and the one kept in
@@ -539,6 +558,24 @@ pub fn on_nav() {
     route();
     load();
     host::scroll_top();
+    render();
+}
+
+/// Zoom, from anywhere: the canvas when it is what is shown, else the open page. 0 puts it back to 1.
+pub fn on_zoom(dy: f64, x: f64, y: f64) {
+    let s = st();
+    if s.page == Page::Home || s.peek {
+        if dy == 0.0 {
+            s.zoom = 1.0;
+            layout_save();
+        } else {
+            canvas_zoom(&format!("{},{},{}", dy, x, y));
+        }
+    } else {
+        let z = if dy == 0.0 { 1.0 } else { (s.pzoom * libm_exp(-dy * 0.0015)).clamp(0.2, 5.0) };
+        s.pzoom = z;
+        host::store_set("piii:pzoom", &format!("{:.4}", z));
+    }
     render();
 }
 
@@ -1414,8 +1451,16 @@ fn update(msg: Msg) {
         Msg::PMember(m) => s.pend_member = Some(m),
         Msg::Activate(id) => activate(id as usize, None),
         Msg::Port(id, t) => {
+            // the click a press makes is already handled by the press (keyboard clicks still come here)
+            if host::now() - s.port_press > 500.0 {
+                if let Some(tip) = Tip::of(t) {
+                    port_click(id, tip);
+                }
+            }
+        }
+        Msg::PortDown(id, t, xy) => {
             if let Some(tip) = Tip::of(t) {
-                port_click(id, tip);
+                port_press(id, tip, &xy);
             }
         }
         Msg::WireSel(i) => {
@@ -1730,7 +1775,7 @@ fn window_frame(s: &State, content: N) -> N {
                 .on("click", Msg::TV(Tool::Grid, 65))
                 .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg))),
         )
-        .kid(el("div").cls("win-body").kid(el("div").cls("win-in").kid(content)))
+        .kid(el("div").cls("win-body").kid(el("div").cls("win-in").attr_if(s.pzoom != 1.0, "style", format!("zoom:{:.4}", s.pzoom)).kid(content)))
         .kid_if(s.win_free, || el("div").cls("win-grip c").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 60)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid_if(s.win_free, || el("div").cls("win-grip r").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 63)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid_if(s.win_free, || el("div").cls("win-grip b").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 64)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
@@ -3086,7 +3131,7 @@ fn ctl_bar(s: &State) -> N {
         .kids([S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR].iter().map(|&id| -> N {
             el("button")
                 .attr("type", "button")
-                .cls("sx ctl")
+                .cls("ric ctlb")
                 .attr("title", sup_label(id))
                 .attr("aria-label", sup_label(id))
                 .cls_if(id == S_RESET && s.reset_hold.is_some(), "holding")

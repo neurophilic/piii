@@ -229,10 +229,6 @@ fn reaches(s: &State, a: usize, b: usize) -> bool {
     false
 }
 
-/// Has the super a gate already, wired or passed on to it?
-fn gated(s: &State, id: usize) -> bool {
-    s.wires.iter().any(|w| w.1 == id && w.2 == Tip::Gate) || s.passes.iter().any(|p| p.2 == id && p.3 == Tip::Gate)
-}
 
 /// Is there a path of wires (or passes) from `a` to `b` that does not pass through a register? (A loop through a
 /// register is how a program repeats; one without would never settle.)
@@ -272,9 +268,6 @@ fn can_connect(s: &State, from: usize, to: usize, tip: Tip) -> Result<(), &'stat
     if is_ctl_super(from) && tip != Tip::Control {
         return Err("save, lock, chain and reset go into a control");
     }
-    if tip == Tip::Gate && gated(s, to) {
-        return Err("a super has one gate");
-    }
     if s.wires.contains(&(from, to, tip)) {
         return Err("already wired");
     }
@@ -299,9 +292,6 @@ fn can_relay(s: &State, from: usize, ft: Tip, to: usize, tt: Tip) -> Result<(), 
     }
     if s.passes.contains(&(from, ft, to, tt)) {
         return Err("already wired");
-    }
-    if tt == Tip::Gate && gated(s, to) {
-        return Err("a super has one gate");
     }
     if loops(s, from, to) {
         return Err("that would make a loop with no register in it: put a reg in the loop");
@@ -488,6 +478,32 @@ fn lock_target_free(s: &State) -> Option<bool> {
     None
 }
 
+/// Selecting something else locks what was selected before (owner, 2026-10-14: "selecting other canvas, other super
+/// locks the previous super automatically"). Called just before a new selection is made.
+/// Every unlocked canvas is locked again except the one being selected (so a drag that let the selection go does
+/// not leave the previous one unlocked).
+fn relock_except(main: Option<usize>, node: Option<usize>, win: bool) {
+    let s = st();
+    let before = s.free.len();
+    s.free.retain(|x| Some(*x) == main);
+    if s.free.len() != before {
+        layout_save();
+    }
+    if let Page::Group(g) = s.page {
+        let gi = g as usize;
+        let b = board(gi);
+        let n0 = b.free.len();
+        b.free.retain(|x| Some(*x) == node);
+        if b.free.len() != n0 {
+            board_save(gi);
+        }
+    }
+    if !win && s.win_free {
+        s.win_free = false;
+        host::store_set("piii:win-free", "0");
+    }
+}
+
 /// The lock: the selected canvas is unlocked, or locked again. With nothing selected it says how.
 fn lock_toggle() {
     let s = st();
@@ -561,7 +577,7 @@ fn name_of(id: usize) -> String {
             Some(n) => format!("“{}”", n.text),
             None => "a node".to_string(),
         },
-        _ => sup_label(id).to_string(),
+        _ => sup_label(id).split(':').next().unwrap_or("").to_string(),
     }
 }
 
@@ -728,7 +744,7 @@ fn geo(s: &State) -> Geo {
 
 /// Where the floating bar's i-th button is on screen (x, y, w, h): its CSS, in numbers.
 fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
-    let (bw, bh) = (46.0, 44.0);
+    let (bw, bh) = (44.0, 44.0);
     let narrow = vw < 700.0;
     let gap = if narrow { 10.0 } else { 12.0 };
     let top = if narrow { vh - 80.0 - bh } else { 10.0 };
@@ -881,16 +897,8 @@ fn control_icon(id: usize, s: &State) -> N {
         S_LOCK => {
             if !lock_target_free(s).unwrap_or(false) {
                 // on (every super held in place): gray (owner, 2026-10-14: "when the lock icon is on, it changes color
-                // to gray")
-                el("svg:svg")
-                    .cls("ci gray")
-                    .attr("viewBox", "0 0 24 24")
-                    .attr("width", "26")
-                    .attr("height", "26")
-                    .attr("aria-hidden", "true")
-                    .kid(el("svg:path").attr("d", "M7 10V7a5 5 0 0 1 10 0v3").attr("fill", "none").attr("stroke", "currentColor").attr("stroke-width", "2.4"))
-                    .kid(el("svg:rect").attr("x", "4.5").attr("y", "10").attr("width", "15").attr("height", "11").attr("rx", "2").attr("fill", "currentColor"))
-                    .into()
+                // to gray"), drawn in outline like every icon
+                svg_icon(&["M7 10V7a5 5 0 0 1 10 0v3", "M4.5 10h15v11h-15z"], "26", "ci gray")
             } else {
                 svg_icon(&["M7 10V7a5 5 0 0 1 9.6-2", "M4.5 10h15v11h-15z"], "26", "ci accent")
             }
@@ -905,8 +913,8 @@ fn control_icon(id: usize, s: &State) -> N {
         S_UP => svg_icon(&["M12 19V5", "M6 11l6-6 6 6"], "26", "ci"),
         S_DOWN => svg_icon(&["M12 5v14", "M6 13l6 6 6-6"], "26", "ci"),
         S_RIGHT => svg_icon(&["M5 12h14", "M13 6l6 6-6 6"], "26", "ci"),
-        S_RUN => el("svg:svg").cls("ci accent").attr("viewBox", "0 0 24 24").attr("width", "24").attr("height", "24").attr("aria-hidden", "true")
-            .kid(el("svg:path").attr("d", "M7 4.5v15l12-7.5z").attr("fill", "currentColor")).into(),
+        // line icons in ink, as every icon (owner, 2026-10-14: "all of these icons should look the same and uniform")
+        S_RUN => svg_icon(&["M7.5 5v14l11-7z"], "24", "ci"),
         S_STEP => svg_icon(&["M6 5l9 7-9 7z", "M18 5v14"], "24", "ci"),
         S_CLEAR => svg_icon(&["M6 6h12v12H6z"], "22", "ci"),
         _ => txt(""),
@@ -1182,6 +1190,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         .on("dbl", Msg::Dbl(false, String::new()))
         .on("dbl2", Msg::Dbl(true, String::new()))
         .on("mwheel", Msg::TV(Tool::Grid, 50))
+        .on("bgdown", Msg::TV(Tool::Grid, 52))
         .kid(el("div").cls("frame"))
         .kid(stage)
         .kid_if(!s.note.is_empty(), || el("div").cls("wire-note").attr("role", "status").text(s.note.clone()).into())
@@ -1287,7 +1296,8 @@ fn libm_cos(x: f64) -> f64 {
 /// The ports to wire with, over everything: each node's out (filled), its tips (drawn round); while a wire is being
 /// made, the tips it may join are marked.
 fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
-    let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 12.0 } else { 10.0 / g.k.max(0.6) };
+    // the connectors: small sparkles (owner, 2026-10-14: "make the center sparkle bigger and connector sparkles smaller")
+    let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 8.5 } else { 7.0 / g.k.max(0.6) };
     let mut svg = el("svg:svg").cls("ports-svg").attr("width", "1").attr("height", "1").attr("aria-hidden", if mini { "true" } else { "false" });
     let mut nodes: Vec<usize> = (0..NSUP).filter(|i| *i != S_PALETTE && *i != S_EXAMPLES && !is_gone(*i)).collect();
     nodes.push(PAGE_IN);
@@ -1320,7 +1330,9 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                 gp = gp
                     .attr("data-stop", "1")
                     .on("click", Msg::Port(id, tip.code()))
-                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 1.4)))
+                    .on("pdown", Msg::PortDown(id, tip.code(), String::new()))
+                    // a big target: easy to hit (owner, 2026-10-14: "improve the wiring experience")
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 3.7)))
                     .kid(el("svg:title").text(format!("{}: {}", name_of(id), match tip {
                         Tip::Out => "out. Click, then click a tip",
                         Tip::In => "in",
@@ -1332,6 +1344,58 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
         }
     }
     svg.into()
+}
+
+/// How near (px) a wire let go of must be to a tip to join it.
+const SNAP: f64 = 36.0;
+
+/// A press on a tip: with nothing held, the wire starts here and follows the pointer; let go on (or near) another tip
+/// and they are wired. With a wire held, the press finishes it. A press without a drag leaves the wire held, so two
+/// clicks still wire too.
+fn port_press(id: usize, tip: Tip, xy: &str) {
+    let s = st();
+    s.port_press = host::now();
+    let mut it = xy.split(',');
+    let x: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let y: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let was_held = s.held_port.is_some();
+    port_click(id, tip);
+    if !was_held && st().held_port.is_some() {
+        st().port_drag = Some((x, y));
+    }
+    render();
+}
+
+/// The tip nearest (x, y) on screen that the held wire may join, within SNAP.
+fn nearest_tip(s: &State, x: f64, y: f64) -> Option<(usize, Tip)> {
+    let (a, ta) = s.held_port?;
+    let g = geo(s);
+    let mut nodes: Vec<usize> = (0..NSUP).filter(|i| *i != S_PALETTE && *i != S_EXAMPLES && !is_gone(*i)).collect();
+    nodes.push(PAGE_IN);
+    nodes.push(PAGE_OUT);
+    nodes.extend(s.prog.nodes.iter().map(|n| n.id));
+    let mut best: Option<(f64, usize, Tip)> = None;
+    for id in nodes {
+        for &tip in tips_of(id) {
+            if (id, tip) == (a, ta) {
+                continue;
+            }
+            let ok = match ta {
+                Tip::Out => tip != Tip::Out && can_connect(s, a, id, tip).is_ok(),
+                _ => matches!(tip, Tip::Control | Tip::Gate) && can_relay(s, a, ta, id, tip).is_ok(),
+            };
+            if !ok {
+                continue;
+            }
+            let (px, py) = if tip == Tip::Out { leave_point(&g, id, if is_ctl_super(id) { Tip::Control } else { Tip::In }) } else { tip_point(&g, id, tip) };
+            let (dx, dy) = (px * g.k + g.ox - x, py * g.k + g.oy - y);
+            let d = (dx * dx + dy * dy).sqrt_c();
+            if d <= SNAP && best.map(|b| d < b.0).unwrap_or(true) {
+                best = Some((d, id, tip));
+            }
+        }
+    }
+    best.map(|b| (b.1, b.2))
 }
 
 /// A click on a port: the first one held, the second one wired to it (or the reason it can not be).
@@ -1661,6 +1725,17 @@ pub fn float_load() {
 
 pub fn on_pointer(phase: u32, x: f64, y: f64) {
     let s = st();
+    if let Some((x0, y0, p0)) = s.pan_drag {
+        let k = geo(s).k;
+        s.pan = (p0.0 + (x - x0) / k, p0.1 + (y - y0) / k);
+        if phase != 0 {
+            s.pan_drag = None;
+            host::capture(false);
+            layout_save();
+        }
+        render();
+        return;
+    }
     if s.reset_cap {
         // the floating reset button, held: its release ends the hold
         if phase != 0 {
@@ -1715,11 +1790,24 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         return;
     }
     if s.held_port.is_some() {
-        // a wire being made follows the pointer until a tip is clicked
+        // a wire being made follows the pointer until a tip is clicked, or, dragged out of a tip, until it is let go
         if phase == 0 {
             let g = geo(s);
             s.pend_at = ((x - g.ox) / g.k, (y - g.oy) / g.k);
             render();
+        } else if let Some((x0, y0)) = s.port_drag.take() {
+            if (x - x0).abs() + (y - y0).abs() > 6.0 {
+                match nearest_tip(s, x, y) {
+                    Some((id, tip)) => port_click(id, tip),
+                    None => {
+                        s.held_port = None;
+                        host::capture(false);
+                        note("Let go on a tip, or near one, to wire it".to_string());
+                    }
+                }
+                s.port_press = host::now();
+                render();
+            }
         }
         return;
     }
@@ -1810,6 +1898,8 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                     activate(d.id, d.member);
                 } else {
                     s.last_tap = (d.id, d.member, now);
+                    relock_except(Some(d.id), None, false);
+                    let s = st();
                     s.sup_pick = Some(d.id);
                     s.float_pick = false;
                     s.win_pick = false;
@@ -1833,6 +1923,27 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
 
 /// The wheel over the canvas: zoom about the pointer, as far in or out as you like (owner, 2026-10-14: "zooming in
 /// and zooming out can be indefinitely"). The value is deltaY, then x, y within the canvas.
+/// The wheel, or two fingers, over the canvas: it pans (deltaY, x, y, w, h, deltaX).
+fn canvas_wheel(v: &str) {
+    let s = st();
+    let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+    let (dy, dx) = (n.first().copied().unwrap_or(0.0), n.get(5).copied().unwrap_or(0.0));
+    let k = geo(s).k;
+    s.pan = (s.pan.0 - dx / k, s.pan.1 - dy / k);
+    layout_save();
+}
+
+/// A press on the bare canvas: dragging pans it (owner, 2026-10-14: "I can't pan on the canvas").
+fn canvas_pan_begin(v: &str) {
+    let s = st();
+    if s.held_port.is_some() {
+        return;
+    }
+    let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+    s.pan_drag = Some((n.first().copied().unwrap_or(0.0), n.get(1).copied().unwrap_or(0.0), s.pan));
+    host::capture(true);
+}
+
 fn canvas_zoom(v: &str) {
     let s = st();
     let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
