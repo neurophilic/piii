@@ -47,6 +47,9 @@ pub struct UNode {
     x: f64,
     y: f64,
     text: String,
+    /// a size given by resizing it (0, 0: the size its text gives)
+    w: f64,
+    h: f64,
 }
 
 #[derive(Default)]
@@ -644,6 +647,9 @@ fn prog_save() {
     for n in &s.prog.nodes {
         out.push_str(&format!("{}\t{:.1}\t{:.1}\t{}\n", n.id, n.x, n.y, n.text.replace(['\t', '\n'], " ")));
     }
+    // sizes given by resizing, kept beside (a v1 reader ignores them)
+    let sizes: Vec<String> = s.prog.nodes.iter().filter(|n| n.w > 0.0).map(|n| format!("{}:{:.1}:{:.1}", n.id, n.w, n.h)).collect();
+    host::store_set("piii:program-sizes", &sizes.join(","));
     host::store_set("piii:program", &out);
     wires_save();
 }
@@ -657,12 +663,20 @@ fn prog_load() -> bool {
         return false;
     }
     s.prog.nodes.clear();
+    let sizes: Vec<(usize, f64, f64)> = host::store_get("piii:program-sizes")
+        .map(|v| v.split(',').filter_map(|e| {
+            let f: Vec<&str> = e.split(':').collect();
+            Some((f.first()?.parse().ok()?, f.get(1)?.parse().ok()?, f.get(2)?.parse().ok()?))
+        }).collect())
+        .unwrap_or_default();
+    let _ = &sizes;
     for l in lines {
         let f: Vec<&str> = l.splitn(4, '\t').collect();
         if let [id, x, y, t] = f.as_slice() {
             if let (Ok(id), Ok(x), Ok(y)) = (id.parse::<usize>(), x.parse::<f64>(), y.parse::<f64>()) {
                 if id >= UBASE {
-                    s.prog.nodes.push(UNode { id, x, y, text: t.to_string() });
+                    let (w, h) = sizes.iter().find(|q| q.0 == id).map(|q| (q.1, q.2)).unwrap_or((0.0, 0.0));
+                    s.prog.nodes.push(UNode { id, x, y, text: t.to_string(), w, h });
                 }
             }
         }
@@ -678,7 +692,7 @@ fn prog_add(text: &str, x: f64, y: f64) -> usize {
     }
     let id = s.prog.next;
     s.prog.next += 1;
-    s.prog.nodes.push(UNode { id, x, y, text: text.to_string() });
+    s.prog.nodes.push(UNode { id, x, y, text: text.to_string(), w: 0.0, h: 0.0 });
     id
 }
 

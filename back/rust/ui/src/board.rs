@@ -302,7 +302,7 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             // as on every canvas: a super stays put, and keeps its size, until the lock frees them; then a drag moves
             // it and the middle button resizes it
             let open = d.free;
-            if d.moved && d.how == 2 && open {
+            if d.moved && d.how != 0 && open {
                 let (gx, gy) = (d.s0.0 + x - d.sx, d.s0.1 + y - d.sy);
                 let b = board(gi);
                 while b.sizes.len() <= node {
@@ -328,7 +328,7 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             s.board_drag = None;
             if moved {
                 board_save(gi);
-            } else if phase == 1 && how != 2 && node >= board(gi).pos.len() {
+            } else if phase == 1 && how == 0 && node >= board(gi).pos.len() {
                 // a super of your own: a double click shrinks it when it is an unlocked canvas; a click selects it
                 let now = host::now();
                 let s = st();
@@ -610,7 +610,12 @@ fn group_board(gi: usize) -> N {
         let (ft, tt) = (link_from(*v), link_to(*v));
         let a = btip(&b, *from, ft);
         let z = btip(&b, *to, tt);
-        let d = curve(a, side_of(ft), z, side_of(tt));
+        // in/out angled, control and gate curved (owner, 2026-10-14)
+        let d = match (ft, tt) {
+            (1, 0) => elbow(a.0, a.1, z.0, z.1, 24.0),
+            (0, 1) => elbow(z.0, z.1, a.0, a.1, 24.0),
+            _ => curve(a, side_of(ft), z, side_of(tt)),
+        };
         let kind = match tt { 0 | 1 => "flow", 2 => "control", _ => "gate" };
         wires = wires
             .kid(el("svg:path").cls("w").cls(kind).cls_if(b.sel == Some(i), "sel").attr("d", d.clone()).attr("marker-end", if kind == "flow" { "url(#bah-flow)" } else { "url(#bah-ink)" }))
@@ -621,9 +626,14 @@ fn group_board(gi: usize) -> N {
     if let (Some(h), Some(at)) = (b.held, b.at) {
         let a = btip(&b, h, b.held_tip);
         let back = match side_of(b.held_tip) { Side::R => Side::L, Side::L => Side::R, Side::T => Side::B, Side::B => Side::T };
-        let d = match bsnap {
-            Some((n, t)) => curve(a, side_of(b.held_tip), btip(&b, n, t), side_of(t)),
-            None => curve(a, side_of(b.held_tip), at, back),
+        let z = bsnap.map(|(n, t)| btip(&b, n, t)).unwrap_or(at);
+        let d = match b.held_tip {
+            1 => elbow(a.0, a.1, z.0, z.1, 24.0),
+            0 => elbow(z.0, z.1, a.0, a.1, 24.0),
+            _ => match bsnap {
+                Some((_, t)) => curve(a, side_of(b.held_tip), z, side_of(t)),
+                None => curve(a, side_of(b.held_tip), at, back),
+            },
         };
         wires = wires.kid(el("svg:path").cls("w-temp").cls_if(bsnap.is_some(), "snapped").attr("d", d));
     }
@@ -648,7 +658,7 @@ fn group_board(gi: usize) -> N {
                     .attr("data-solid", "1")
                     .on("click", Msg::T(Tool::Grid, 2, format!("{},{}", i, t)))
                     .on("pdown", Msg::TV(Tool::Grid, 6000 + (i * 4) as u16 + t as u16))
-                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", "24"))
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", "17"))
                     .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, 7.0)))
                     .kid(el("svg:title").text(match t { 0 => "in", 1 => "out: click, then click a tip of another super", 2 => "control", _ => "gate" })),
             );

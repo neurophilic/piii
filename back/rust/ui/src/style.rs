@@ -265,10 +265,11 @@ font-size:20px;line-height:1;color:var(--muted)}
 .frame{position:absolute;inset:0;border:2px solid var(--accent);pointer-events:none;z-index:3}
 .stage{position:absolute;left:0;top:0;width:1440px;height:900px;transform-origin:0 0}
 .wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:2.2;stroke-linejoin:round}
-.wires .w.flow,.map .w.data{stroke:var(--magenta);stroke-width:3}
-.wires .w.control{stroke-dasharray:12 8}
-.wires .w.gate{stroke-width:4.5;stroke-dasharray:0.1 9;stroke-linecap:round}
+.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.wires .w,.wires .w-temp,.wires .w-hit{vector-effect:non-scaling-stroke}
+.wires .w.flow,.map .w.data{stroke:var(--magenta);stroke-width:2.4;stroke-linecap:butt}
+.wires .w.control{stroke-dasharray:7 5}
+.wires .w.gate{stroke-width:3;stroke-dasharray:0.1 6;stroke-linecap:round}
 .wires .head.flow{fill:var(--magenta)}.wires .head.ink{fill:#2b2b2b}
 .ports-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5}
 .ports-svg .port{pointer-events:all;cursor:pointer}
@@ -363,8 +364,8 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .ric.open::after,.super.open::after{content:none!important;display:none!important}
 /* wiring */
 .wires .w-hit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
-.wires .w.sel{stroke:var(--accent);stroke-width:3.2}
-.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:6 6;stroke-linecap:round}.wires .w-temp.snapped{stroke-dasharray:none;stroke-width:2.8}
+.wires .w.sel{stroke:var(--accent);stroke-width:3}
+.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 5;stroke-linecap:round;stroke-linejoin:round}.wires .w-temp.snapped{stroke-dasharray:none;stroke-width:2.4}
 .ports-svg .port.snap .mark{fill:var(--accent);stroke:var(--accent);opacity:1;transform-box:fill-box;transform-origin:center;transform:scale(1.7)}
 .wires .w-hit:hover{stroke:rgba(47,64,232,.22)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}

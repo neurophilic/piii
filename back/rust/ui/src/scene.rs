@@ -399,7 +399,7 @@ fn locked(s: &State, id: usize) -> bool {
     !s.free.contains(&id)
 }
 
-/// A super under this share of the window's area, as drawn now, is an icon; at or over it, a canvas (owner,
+/// A super under this share of the window's width or height, as drawn now, is an icon; at or over both, a canvas (owner,
 /// 2026-10-14: "if a super is less than 10% of the screen size, then it's icon. If it's more than 10%, it's a canvas").
 /// An icon is drawn as one and is never locked; it changes as the canvas zooms or the super is resized.
 // 5% for a while, then 10% again (owner, 2026-10-14)
@@ -409,7 +409,9 @@ const ICON_SHARE: f64 = 0.10;
 const MIN_SUPER: f64 = 0.5;
 
 fn icon_area(w_px: f64, h_px: f64) -> bool {
-    w_px * h_px < ICON_SHARE * host::vw() * host::vh()
+    // measured as it looks: under 10% of the window's width or of its height, an icon; at least 10% of both, a canvas
+    // that reads in full (owner, 2026-10-14: "it's bigger than 10% of the screen. It should read completely")
+    w_px < ICON_SHARE * host::vw() || h_px < ICON_SHARE * host::vh()
 }
 
 /// Supers that take the icon look when small: not the controls (already icons), the title, the holder's frame, or
@@ -441,11 +443,11 @@ const SHRUNK_SHARE: f64 = 0.08;
 /// an icon, else that shape at 8% of the window.
 fn icon_size(bw: f64, bh: f64, k: f64) -> (f64, f64) {
     let (vw, vh) = (host::vw(), host::vh());
-    let area = bw * bh * k * k;
-    if area < ICON_SHARE * vw * vh {
+    if icon_area(bw * k, bh * k) {
         (bw, bh)
     } else {
-        let f = (SHRUNK_SHARE * vw * vh / area).sqrt_c();
+        // that shape, at 8% of the window across or down, whichever comes first
+        let f = (SHRUNK_SHARE * vw / (bw * k)).min(SHRUNK_SHARE * vh / (bh * k));
         (bw * f, bh * f)
     }
 }
@@ -806,7 +808,7 @@ fn geo_zoom(s: &State, w: f64, h: f64, narrow: bool, zoom: f64) -> Geo {
     }
     let (px, py, _, _) = rects[S_PROG];
     let extra = s.prog.nodes.iter().map(|n| {
-        let (w, h) = unode_size(&n.text);
+        let (w, h) = if n.w > 0.0 { (n.w, n.h) } else { unode_size(&n.text) };
         (n.id, (px + n.x, py + n.y, w, h))
     }).collect();
     Geo { k, ox, oy, w, h, rects, extra }
@@ -1065,14 +1067,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         let (px, py) = leave_point(&g, a, tip);
         let (qx, qy) = tip_point(&g, b, tip);
         let d = match tip {
-            Tip::In | Tip::Out => {
-                // a smooth curve, leaving out to the right and arriving into the in from the left, as node editors draw
-                // them (owner, 2026-10-14: "improve the wiring experience. Like professional")
-                // a wire going back (right to left) loops tight, rather than swinging wide across what is between
-                let min = 40.0 / g.k.max(0.2);
-                let k = if qx >= px { ((qx - px) * 0.5).max(min) } else { ((px - qx) * 0.2).clamp(min * 1.5, min * 3.0).max((qy - py).abs() * 0.25) };
-                format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", px, py, px + k, py, qx - k, qy, qx, qy)
-            }
+            Tip::In | Tip::Out => elbow(px, py, qx, qy, 24.0 / g.k.max(0.2)),
             _ => {
                 // top-to-bottom wires curve (owner, 2026-10-14): leave the way the tip faces, arrive straight down
                 // into a control or straight up into a gate
@@ -1134,7 +1129,12 @@ fn scene_view(s: &State, mini: bool) -> N {
         let k = (((x2 - x1).abs() + (y2 - y1).abs()) * 0.4).max(30.0 / g.k.max(0.2));
         let (ax, ay) = away(ta);
         let (bx, by) = match snap { Some((_, t)) => away(t), None => (-ax, -ay) };
-        let d = format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", x1, y1, x1 + ax * k, y1 + ay * k, x2 + bx * k, y2 + by * k, x2, y2);
+        let e = 24.0 / g.k.max(0.2);
+        let d = match ta {
+            Tip::Out => elbow(x1, y1, x2, y2, e),
+            Tip::In => elbow(x2, y2, x1, y1, e),
+            _ => format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", x1, y1, x1 + ax * k, y1 + ay * k, x2 + bx * k, y2 + by * k, x2, y2),
+        };
         wires = wires.kid(el("svg:path").cls("w-temp").cls_if(snap.is_some(), "snapped").attr("d", d));
     }
     let ports_svg = ports_view(s, &g, mini);
@@ -1260,6 +1260,23 @@ fn leave_point(g: &Geo, id: usize, into: Tip) -> (f64, f64) {
     tip_point(g, id, Tip::Out)
 }
 
+/// The angled route of an in/out wire, from an out at (px, py) to an in at (qx, qy) (owner, 2026-10-14: "left to right
+/// wiring is angled"): across, then up or down, then across into the in; a wire going back steps out by `e`, runs
+/// between the two, and comes back in from the left.
+fn elbow(px: f64, py: f64, qx: f64, qy: f64, e: f64) -> String {
+    if qx >= px + 4.0 {
+        let mid = (px + qx) / 2.0;
+        if (qy - py).abs() < 0.5 {
+            format!("M{:.1},{:.1} H{:.1}", px, py, qx)
+        } else {
+            format!("M{:.1},{:.1} H{:.1} V{:.1} H{:.1}", px, py, mid, qy, qx)
+        }
+    } else {
+        let my = (py + qy) / 2.0;
+        format!("M{:.1},{:.1} H{:.1} V{:.1} H{:.1} V{:.1} H{:.1}", px, py, px + e, my, qx - e, qy, qx)
+    }
+}
+
 fn arrowhead(id: &'static str, cls: &'static str) -> N {
     el("svg:marker")
         .attr("id", id)
@@ -1267,8 +1284,8 @@ fn arrowhead(id: &'static str, cls: &'static str) -> N {
         .attr("refX", "10")
         .attr("refY", "5")
         .attr("markerUnits", "userSpaceOnUse")
-        .attr("markerWidth", "16")
-        .attr("markerHeight", "16")
+        .attr("markerWidth", "11")
+        .attr("markerHeight", "11")
         .attr("orient", "auto")
         .kid(el("svg:path").cls(format!("head {}", cls).as_str()).attr("d", "M0,0L10,5L0,10Z"))
         .into()
@@ -1378,7 +1395,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                     .on("click", Msg::Port(id, tip.code()))
                     .on("pdown", Msg::PortDown(id, tip.code(), String::new()))
                     // a big target: easy to hit (owner, 2026-10-14: "improve the wiring experience")
-                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 3.7)))
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 2.4)))
                     .kid(el("svg:title").text(format!("{}: {}", name_of(id), match tip {
                         Tip::Out => "out. Click, then click a tip",
                         Tip::In => "in",
@@ -1592,7 +1609,7 @@ fn begin_drag(id: usize, at: &str) {
     }
     let start = ids.iter().map(|i| (*i, pos_of(s, *i))).collect();
     let free = !locked(s, id);
-    s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan, how, size0: if id < NSUP { s.sizes[id] } else { (0.0, 0.0) }, free });
+    s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan, how, size0: if id < NSUP { s.sizes[id] } else { let r = rect(&g, id); (r.2, r.3) }, free });
     host::capture(true);
 }
 
@@ -1875,9 +1892,11 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
     }
     // locking keeps a super in place: no drag while it is locked, shift or not (owner, 2026-10-14: "locking makes canvas at
     // place and can't be draggable or resizable")
-    let movable = s.drag.as_ref().map(|d| d.how != 2 && d.free && d.id >= S_WELCOME).unwrap_or(false);
+    // shift + drag, or the middle button held, resizes; a plain drag moves (owner, 2026-10-14: "shift click or middle
+    // click holding can resize any super")
+    let movable = s.drag.as_ref().map(|d| d.how == 0 && d.free && d.id >= S_WELCOME).unwrap_or(false);
     // resizing too waits for the lock: a super is resized only once the lock has freed it (owner, 2026-10-14)
-    let resizable = s.drag.as_ref().map(|d| d.how == 2 && d.id >= S_WELCOME && d.id < NSUP && !is_ctl_super(d.id) && d.free).unwrap_or(false);
+    let resizable = s.drag.as_ref().map(|d| d.how != 0 && d.id >= S_WELCOME && !on_bar(d.id) && rail_pin(d.id).is_none() && d.free).unwrap_or(false);
     let Some(d) = s.drag.as_mut() else {
         host::capture(false);
         return;
@@ -1900,7 +1919,13 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                     return;
                 }
             }
-            if d.moved && resizable {
+            if d.moved && resizable && is_unode(d.id) {
+                let (w, h) = ((d.size0.0 + dx).max(MIN_SUPER), (d.size0.1 + dy).max(MIN_SUPER));
+                if let Some(n) = s.prog.nodes.iter_mut().find(|n| n.id == d.id) {
+                    n.w = w;
+                    n.h = h;
+                }
+            } else if d.moved && resizable {
                 let (b, _, _) = base(host::vw() < 700.0);
                 let (bw, bh) = (b[d.id].2, b[d.id].3);
                 // no limit either way (owner, 2026-10-14: "a super can get infinitely bigger or infinitely smaller"): it only
@@ -1922,8 +1947,10 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         1 => {
             host::capture(false);
             let d = s.drag.take().unwrap();
-            if d.how == 2 {
-                if d.moved {
+            if d.how != 0 && d.moved {
+                if is_unode(d.id) {
+                    prog_save();
+                } else {
                     layout_save();
                 }
             } else if !d.moved && d.id == S_RESET {
