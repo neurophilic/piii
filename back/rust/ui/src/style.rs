@@ -375,13 +375,23 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene,.win-body{cursor:grab}:where(.scene *,.win-body *){cursor:auto}
 .scene.panning,.scene.panning *,html.panning,html.panning *{cursor:grabbing!important}
 html.shift-on,html.shift-on *{cursor:move!important}
+.tip-lab{font-family:ui-sans-serif,system-ui,sans-serif;font-weight:600;fill:var(--accent);stroke:var(--paper);stroke-width:3px;paint-order:stroke;vector-effect:non-scaling-stroke;opacity:0;pointer-events:none;transition:opacity .12s}
+.app.wire-on .port.hov .tip-lab,.app.wire-on .port:hover .tip-lab{opacity:1}
+.pl{position:absolute;z-index:3;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;color:var(--accent);background:var(--paper);padding:2px 4px;border-radius:5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s}
+.pl.l{right:calc(100% + 9px);top:50%;transform:translateY(-50%)}.pl.r{left:calc(100% + 9px);top:50%;transform:translateY(-50%)}
+.pl.t{bottom:calc(100% + 9px);left:50%;transform:translateX(-50%)}.pl.b{top:calc(100% + 9px);left:50%;transform:translateX(-50%)}
+.app.wire-on .ric:hover .pl{opacity:1}
+.app.wire-on .ric:hover{z-index:20}
+.ctl-bar .pl.t{bottom:auto;top:-4px;left:calc(50% + 9px);transform:none}
+.rail .pl.l{right:auto;left:-4px;top:auto;bottom:calc(50% + 7px);transform:none}.rail .pl.r{left:auto;right:-4px;top:auto;bottom:calc(50% + 7px);transform:none}
+@keyframes lockblink{0%,100%{box-shadow:0 0 0 0 transparent}30%,70%{box-shadow:0 0 0 4px var(--accent)}}.ctl-bar .ric.blink{animation:lockblink .6s ease-in-out 2}
 .ric{-webkit-user-drag:none;user-select:none}
 /* wiring off: tips that hold no wire stay hidden and no tip takes a click; on: every tip shows and wires */
 .app:not(.wire-on) .ports-svg .port,.app:not(.wire-on) .bar-pts .pt{pointer-events:none!important}
 .app:not(.wire-on) .ports-svg .port:not(.wired) .mark{opacity:0!important}
-.app.wire-on .ports-svg .port .mark{opacity:1}
+.app.wire-on .ports-svg .port .mark{opacity:1!important}
 .ctl-bar .ric.on{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:3px}
-.win-in{position:relative;user-select:none;-webkit-user-select:none}.win-in input,.win-in textarea{user-select:text;-webkit-user-select:text}
+.win,.win-in{user-select:none;-webkit-user-select:none}.win-in{position:relative}.win-in input,.win-in textarea{user-select:text;-webkit-user-select:text}
 .page-layer{position:absolute;left:0;top:0;width:0;height:0;overflow:visible;z-index:6}
 .layer-node{position:absolute;width:88px;height:88px;box-sizing:border-box;display:grid;place-items:center}
 .layer-spark svg{display:block}.layer-spark path{fill:none;stroke:var(--ink);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}

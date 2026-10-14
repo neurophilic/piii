@@ -80,16 +80,17 @@ const host = {
     // anywhere on an open page, over text too (owner, 2026-10-14): x, y within the node, as drawn; a super's own
     // canvas and the fields being typed in keep their own double clicks
     else if (k === "pdbl") n.addEventListener("dblclick", (e) => {
-      if (e.target.closest("input, textarea, select, [contenteditable], .board, [data-layer]")) return;
-      e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top));
+      if (e.target.closest("input, textarea, select, [contenteditable], .board, [data-layer], .win-grip, .ports-svg")) return;
+      // where on the page's own column (what is drawn moves with it), wherever on the window the click was
+      e.preventDefault(); const r = (n.querySelector(".win-in") || n).getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top));
     });
     else if (k === "pdbl2") {
       let last = 0;
       n.addEventListener("contextmenu", (e) => {
-        if (e.target.closest("input, textarea, select, [contenteditable], .board, [data-layer]")) return;
+        if (e.target.closest("input, textarea, select, [contenteditable], .board, [data-layer], .win-grip, .ports-svg")) return;
         e.preventDefault();
         const t = Date.now();
-        if (t - last < 450) { last = 0; const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top)); } else last = t;
+        if (t - last < 450) { last = 0; const r = (n.querySelector(".win-in") || n).getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top)); } else last = t;
       });
     }
     else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } });
@@ -308,7 +309,23 @@ const shifted = (on) => document.documentElement.classList.toggle("shift-on", !!
 addEventListener("keydown", (e) => { if (e.key === "Shift" && !typing(e.target)) shifted(true); });
 addEventListener("keyup", (e) => { if (e.key === "Shift") shifted(false); });
 addEventListener("blur", () => shifted(false));
-addEventListener("pointermove", (e) => { if (!e.shiftKey && document.documentElement.classList.contains("shift-on")) shifted(false); if (capturing) W.pointer(0, e.clientX, e.clientY); });
+// the middle button held does what Shift does, and shows the same four arrows
+addEventListener("pointerdown", (e) => { if (e.button === 1) shifted(true); }, true);
+addEventListener("pointerup", (e) => { if (e.button === 1 && !e.shiftKey) shifted(false); }, true);
+// while wiring, the super under the pointer names its tips: its ports (drawn in their own layer) are marked .hov
+let hovKey = null;
+const hovMark = (key) => {
+  document.querySelectorAll(".ports-svg .port.hov").forEach((g) => { if (!key || !g.dataset.p || !g.dataset.p.startsWith(key + "-")) g.classList.remove("hov"); });
+  if (key) document.querySelectorAll(`.ports-svg .port[data-p^="${key}-"]`).forEach((g) => g.classList.add("hov"));
+};
+addEventListener("pointerover", (e) => {
+  const t = e.target instanceof Element ? e.target : null;
+  const port = t && t.closest(".ports-svg .port[data-p]");
+  const sup = t && t.closest("[data-s], [data-bn]");
+  const key = port ? port.dataset.p.slice(0, port.dataset.p.lastIndexOf("-")) : sup ? (sup.dataset.s !== undefined ? sup.dataset.s : "b" + sup.dataset.bn) : null;
+  if (key !== hovKey) { hovKey = key; hovMark(key); }
+});
+addEventListener("pointermove", (e) => { if (hovKey && !document.querySelector(".ports-svg .port.hov")) hovMark(hovKey); if (!e.shiftKey && document.documentElement.classList.contains("shift-on")) shifted(false); if (capturing) W.pointer(0, e.clientX, e.clientY); });
 addEventListener("pointerup", (e) => { if (capturing) W.pointer(1, e.clientX, e.clientY); });
 addEventListener("pointercancel", (e) => { if (capturing) W.pointer(2, e.clientX, e.clientY); });
 // Zoom is piii's own, the same everywhere, and never the browser's (owner, 2026-10-14): a pinch, Ctrl/⌘ and the wheel,

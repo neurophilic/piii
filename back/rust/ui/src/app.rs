@@ -282,6 +282,8 @@ struct State {
     example_on: bool,
     /// wiring is on (the + on the bar): every tip shows and wires; off, tips stay out of the way
     wire_mode: bool,
+    /// when a locked super was last pulled at: the lock blinks for a moment
+    lock_blink: f64,
     /// sparkles (0) and supers (1) drawn on pages, by the page's address: kind, x, y, label
     layers: BTreeMap<String, Vec<(u8, f64, f64, String)>>,
     /// where the open window has been moved to (px from its place), once unlocked
@@ -451,6 +453,7 @@ pub fn start() {
         ppan: (0.0, 0.0),
         example_on: false,
         wire_mode: false,
+        lock_blink: 0.0,
         layers: BTreeMap::new(),
         win_off: (0.0, 0.0),
         pan_drag: None,
@@ -649,7 +652,8 @@ pub fn layer_add(kind: u8, at: &str) {
     let n: Vec<f64> = at.split(',').filter_map(|x| x.parse().ok()).collect();
     let z = st().pzoom.max(0.01);
     let (x, y) = (n.first().copied().unwrap_or(0.0) / z - 44.0, n.get(1).copied().unwrap_or(0.0) / z - 44.0);
-    layer().push((kind, x.max(0.0), y.max(0.0), String::new()));
+    // left and right of the page's column are canvas too; above its top is the window's head, so it lands just below
+    layer().push((kind, x, y.max(0.0), String::new()));
     layer_save();
 }
 
@@ -1959,6 +1963,10 @@ fn window_frame(s: &State, content: N) -> N {
         .cls_if(s.win_pick, "picked")
         .attr_if(!size.is_empty(), "style", size)
         .attr("aria-label", super_name(s, s.page, arg))
+        // a double click anywhere on the window draws a sparkle, a double right click a super: its head, its margins
+        // and under its content are canvas too (owner, 2026-10-14: "outside Connect is also canvas")
+        .on("pdbl", Msg::TV(Tool::Grid, 80))
+        .on("pdbl2", Msg::TV(Tool::Grid, 81))
         .kid(
             el("div")
                 .cls("win-head")
@@ -1971,9 +1979,6 @@ fn window_frame(s: &State, content: N) -> N {
             el("div")
                 .cls("win-in")
                 .attr_if(s.pzoom != 1.0 || s.ppan != (0.0, 0.0), "style", format!("zoom:{:.4};transform:translate({:.1}px,{:.1}px)", s.pzoom, s.ppan.0 / s.pzoom, s.ppan.1 / s.pzoom))
-                // a double click anywhere draws a sparkle, a double right click a super (owner, 2026-10-14)
-                .on("pdbl", Msg::TV(Tool::Grid, 80))
-                .on("pdbl2", Msg::TV(Tool::Grid, 81))
                 .kid(content)
                 .kid(layer_view()),
         ))
@@ -3336,6 +3341,7 @@ fn ctl_bar(s: &State) -> N {
                 .attr("title", sup_label(id))
                 .attr("aria-label", sup_label(id))
                 .cls_if(id == S_RESET && s.reset_hold.is_some(), "holding")
+                .cls_if(id == S_LOCK && host::now() - s.lock_blink < 1500.0, "blink")
                 .on_if(id != S_RESET, "click", Msg::Activate(id as u8))
                 .kid_if(id == S_RESET, || el("span").cls("hold-face").on("pdown", Msg::TV(Tool::Grid, 66)).into())
                 .kid(control_icon(id, s))

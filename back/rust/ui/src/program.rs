@@ -941,8 +941,13 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         _ => "k-fn",
     };
     let a = ((n.id - UBASE) as u16) << 4;
+    // grown to half as big again as it was made (by area), a super is a canvas: its name up in the corner and room
+    // below it (owner, 2026-10-14: "if a new super becomes 50% larger than its initial state, it turns into a canvas")
+    let (iw, ih) = unode_size(&n.text);
+    let canvas = n.w > 0.0 && n.w * n.h >= 1.5 * iw * ih;
     el("div")
         .cls("sx unode")
+        .cls_if(canvas, "u-canvas")
         .cls(kcls)
         .cls_if(s.prog.sel == Some(n.id), "sel")
         .cls_if(!shown.is_empty(), "has-val")
@@ -1023,6 +1028,9 @@ const PROG_CSS: &str = "\
 .sparkle svg{display:block}.sparkle path{fill:none;stroke:var(--ink);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}.sparkle.sel path{fill:none;stroke:var(--accent)}.sx.unode.sparkle.sel{outline:0}\
 .sp-val{position:absolute;top:100%;left:50%;transform:translateX(-50%);font-size:11.5px;color:var(--magenta);font-weight:600;white-space:nowrap}\
 .sx.unode.sel{outline:2px solid var(--accent);outline-offset:3px}\
+.sx.unode.u-canvas{justify-content:flex-start;align-items:flex-start;padding:12px 14px;border-radius:18px}\
+.sx.unode.u-canvas .u-text,.sx.unode.u-canvas.empty .u-text{width:auto;field-sizing:content;min-width:5ch;max-width:100%;border:1.5px solid #2b2b2b;border-radius:9px;padding:1px 7px;background:#fff;text-align:left}\
+.sx.unode.u-canvas .u-val{margin-top:auto;align-self:flex-end;max-width:100%}\
 .u-text{font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;border:0;background:transparent;width:100%;padding:0;color:var(--ink);text-align:center;outline:none;cursor:text}\
 .sx.unode.empty .u-text{border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px}.sx.unode.empty .u-text:focus{border-color:var(--accent)}\
 .u-val{font-size:11.5px;color:var(--faint);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}\

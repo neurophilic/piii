@@ -673,7 +673,9 @@ fn group_board(gi: usize) -> N {
                     .on("click", Msg::T(Tool::Grid, 2, format!("{},{}", i, t)))
                     .on("pdown", Msg::TV(Tool::Grid, 6000 + (i * 4) as u16 + t as u16))
                     .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", (17.0 * du).max(15.0 / pz))))
+                    .attr("data-p", format!("b{}-{}", i, t))
                     .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, 6.5 * du)))
+                    .kid(tip_label(x, y, 11.0 * du, 11.0 * du, match t { 0 => Tip::In, 1 => Tip::Out, 2 => Tip::Control, _ => Tip::Gate }))
                     .kid(el("svg:title").text(match t { 0 => "in", 1 => "out: click, then click a tip of another super", 2 => "control", _ => "gate" })),
             );
         }
@@ -700,6 +702,7 @@ fn group_board(gi: usize) -> N {
                 .attr("data-solid", "1")
                 .style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh))
                 .on("pdown", Msg::TV(Tool::Grid, 1000 + m as u16))
+                .attr("data-bn", format!("{}", m))
                 .on("enter", Msg::T(Tool::Grid, 8, format!("{}", m)))
                 .cls_if(bicon(bw, bh), "icon")
                 .attr_if(bicon(bw, bh), "title", name.to_string())
@@ -712,11 +715,12 @@ fn group_board(gi: usize) -> N {
     for (k, (kind, _, _, label)) in b.extra.iter().enumerate() {
         let i = b.pos.len() + k;
         let (x, y, bw, bh) = bnode(&b, i);
-        let base = el("div").cls("bnode").cls_if(b.picked == Some(i), "picked").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
+        let base = el("div").cls("bnode").cls_if(b.picked == Some(i), "picked").attr("data-solid", "1").attr("data-bn", format!("{}", i)).style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
         nodes.push(if *kind == 0 {
             base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-44 -44 88 88").attr("width", "100%").attr("height", "100%").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 43.0)))).into()
         } else {
-            base.cls("buser").kid(
+            // half as big again as made, by area: a canvas, its name up in the corner (owner, 2026-10-14)
+            base.cls("buser").cls_if(bw * bh >= 1.5 * USW * USH, "u-canvas").kid(
                 el("input")
                     .cls("buser-in")
                     .attr("type", "text")
@@ -759,4 +763,5 @@ const BOARD_CSS: &str = "\
 .board .buser{display:flex;align-items:center;padding:8px;background:#fff;border:1.6px solid var(--ink);border-radius:18px}\
 .board .buser-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:inherit;font-size:15px;text-align:center;outline:none;cursor:text}.board .buser-in:focus{border-color:var(--accent)}\
 .board-bar{margin-top:10px;justify-content:space-between}\
+.board .buser.u-canvas{align-items:flex-start;padding:12px 14px}.board .buser.u-canvas .buser-in{width:auto;field-sizing:content;min-width:5ch;max-width:100%;border:1.5px solid var(--ink);border-radius:9px;padding:1px 7px;background:#fff;text-align:left}\
 ";

@@ -1266,6 +1266,12 @@ fn leave_point(g: &Geo, id: usize, into: Tip) -> (f64, f64) {
     tip_point(g, id, Tip::Out)
 }
 
+/// Tells how to resize a locked super, and makes the lock blink once.
+fn lock_hint(_id: usize) {
+    note("Locked: click the lock up top to resize it".to_string());
+    st().lock_blink = host::now();
+}
+
 /// The angled route of an in/out wire, from an out at (px, py) to an in at (qx, qy) (owner, 2026-10-14: "left to right
 /// wiring is angled"): across, then up or down, then across into the in; a wire going back steps out by `e`, runs
 /// between the two, and comes back in from the left.
@@ -1410,6 +1416,11 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                 .cls_if(snap == Some((id, tip)), "snap")
                 .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, r)));
             if !mini {
+                // its name beside it, shown while wiring is on and the pointer is over its super (owner, 2026-10-14:
+                // "when hovering on a sparkle or super, show the labels of in, out, control and gate")
+                gp = gp.kid(tip_label(x, y, r * 1.7, 11.0 * ws / g.k.max(0.05), tip));
+            }
+            if !mini {
                 gp = gp
                     .attr("data-stop", "1")
                     .on("click", Msg::Port(id, tip.code()))
@@ -1427,6 +1438,25 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
         }
     }
     svg.into()
+}
+
+/// A tip's name, just outside it: in to the left, out to the right, control above, gate below.
+fn tip_label(x: f64, y: f64, off: f64, fs: f64, tip: Tip) -> N {
+    let (lx, ly, anchor) = match tip {
+        Tip::In => (x - off, y, "end"),
+        Tip::Out => (x + off, y, "start"),
+        Tip::Control => (x, y - off, "middle"),
+        Tip::Gate => (x, y + off, "middle"),
+    };
+    el("svg:text")
+        .cls("tip-lab")
+        .attr("x", format!("{:.1}", lx))
+        .attr("y", format!("{:.1}", ly))
+        .attr("font-size", format!("{:.2}", fs))
+        .attr("text-anchor", anchor)
+        .attr("dominant-baseline", "central")
+        .text(tip.name())
+        .into()
 }
 
 /// How near (px) a wire let go of must be to a tip to join it.
@@ -1926,6 +1956,12 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         0 => {
             if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 5.0 {
                 d.moved = true;
+                // a Shift or middle-button drag on a super still locked: say how to free it, rather than nothing
+                // happening (owner, 2026-10-14: "I can't resize a sparkle")
+                if d.how != 0 && !d.free && d.id >= S_WELCOME && !on_bar(d.id) && rail_pin(d.id).is_none() {
+                    let id = d.id;
+                    lock_hint(id);
+                }
                 if d.id == S_RESET {
                     reset_hold_end(false);
                 }
@@ -2256,7 +2292,18 @@ fn bar_ports(id: usize) -> N {
             .kid(el("svg:path").attr("d", star(0.0, 0.0, 7.0)))
             .into()
     };
-    el("span").cls("pts bar-pts").kid(tip("pt l", Tip::In)).kid(tip("pt r", Tip::Out)).kid(tip("pt t", Tip::Control)).kid(tip("pt b", Tip::Gate)).into()
+    let lab = |c: &'static str, t: &'static str| -> N { el("span").cls(c).attr("aria-hidden", "true").text(t).into() };
+    el("span")
+        .cls("pts bar-pts")
+        .kid(tip("pt l", Tip::In))
+        .kid(tip("pt r", Tip::Out))
+        .kid(tip("pt t", Tip::Control))
+        .kid(tip("pt b", Tip::Gate))
+        .kid(lab("pl l", "in"))
+        .kid(lab("pl r", "out"))
+        .kid(lab("pl t", "control"))
+        .kid(lab("pl b", "gate"))
+        .into()
 }
 
 fn ports() -> N {
