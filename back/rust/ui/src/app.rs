@@ -5,7 +5,7 @@
 //! other super turns into an icon in the rail at the side (along the bottom on a phone); π in the rail goes back.
 //! Every change goes through `update`, after which the whole view is built again and `Dom` patches the page.
 
-use crate::dom::{Node, el, txt};
+use crate::dom::{El, Node, el, txt};
 use crate::host;
 use crate::json::{self, Value};
 use crate::mem::Global;
@@ -85,6 +85,8 @@ enum Msg {
     WireSel(u8),
     WireDel(u8),
     Port(u8, u8),
+    /// A tool's action, with what was typed or chosen (tools.rs).
+    T(Tool, u16, String),
 }
 
 impl crate::dom::Fill for Msg {
@@ -120,6 +122,7 @@ enum Want {
     Answer,
     Gate,
     Item(u8, u8),
+    Tool(Tool, u8),
 }
 
 /// Something fetched: nothing yet, on its way, here, or failed.
@@ -238,6 +241,8 @@ struct State {
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
     note: String,
+    /// the tools that were JavaScript (tools.rs)
+    t: Tools,
 }
 
 static STATE: Global<Option<State>> = Global::new(None);
@@ -266,6 +271,10 @@ pub fn start() {
     let rule_node = host::create_text(&rule);
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
+    let tools = host::create_el("style");
+    let tools_css = host::create_text(TOOLS_CSS);
+    host::append_child(tools, tools_css);
+    host::append_child(head, tools);
     let meta = host::create_el("meta");
     host::set_attr(meta, "name", "theme-color");
     host::set_attr(meta, "content", "#f7f5ef");
@@ -348,6 +357,7 @@ pub fn start() {
         wire_sel: None,
         wiring: None,
         note: String::new(),
+        t: Tools::default(),
     };
 
     // Coming back from ORCID: the callback sends ?orcid=…&orcid_name=…&token=… (or ?orcid_error=…).
@@ -449,6 +459,7 @@ pub fn on_timer(token: u32) {
             }
         }
         T_NOTE => s.note.clear(),
+        T_NF => frenzy_tick(),
         T_LIVE => {
             if matches!(s.page, Page::Home | Page::Live) && !s.live.busy {
                 s.live.busy = true;
@@ -556,6 +567,14 @@ fn route() {
     if s.page != Page::Home {
         open_win(s.page, &arg);
     }
+    // a tool whose window is no longer the page stops what it runs
+    let on_tool = match s.page {
+        Page::Item(g, m) => matches!(GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)), Some((_, Target::Tool(_)))),
+        _ => false,
+    };
+    if !on_tool {
+        tools_leave();
+    }
 }
 
 /// Puts a window among the open ones (a few papers at most: the oldest goes first).
@@ -608,6 +627,9 @@ fn load() {
         }
         Page::Group(_) | Page::Map => {}
         Page::Item(g, m) => {
+            if let Some((_, Target::Tool(t))) = GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)) {
+                tool_load(*t);
+            }
             if let Some((_, Target::Data(url, _))) = GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)) {
                 if s.item.needed() {
                     s.item.busy = true;
@@ -865,6 +887,7 @@ fn apply(want: Want, v: Value, err: Option<String>) {
                 put(&mut s.item, v, err);
             }
         }
+        Want::Tool(t, w) => tool_apply(t, w, v, err),
     }
 }
 
@@ -1062,6 +1085,7 @@ fn stream_line(line: &str) {
 fn update(msg: Msg) {
     let s = st();
     match msg {
+        Msg::T(t, a, v) => tool_update(t, a, v),
         Msg::Mode(m) => {
             s.mode = m;
             s.form_err = None;
@@ -2701,3 +2725,4 @@ fn short(w: &str) -> String {
 }
 
 include!("scene.rs");
+include!("tools.rs");

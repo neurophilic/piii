@@ -386,6 +386,8 @@ enum Target {
     Data(&'static str, &'static str),
     /// A tool that ran in JavaScript and is being rewritten in Rust.
     Soon(&'static str),
+    /// A tool rewritten in Rust (tools.rs).
+    Tool(Tool),
 }
 
 struct Group {
@@ -400,7 +402,7 @@ const GROUPS: [Group; 5] = [
         title: "Tools",
         members: &[
             ("Assess Manuscripts [Pi]", Target::Hash("#/assess")),
-            ("Assist Diagnosis [Intern]", Target::Soon("The Intern helped with diagnoses from the MD plan.")),
+            ("Assist Diagnosis [Intern]", Target::Tool(Tool::Intern)),
             ("FaceMace", Target::Soon("FaceMace sorted photos by face, in your browser.")),
         ],
     },
@@ -431,8 +433,8 @@ const GROUPS: [Group; 5] = [
                  ledger. PiEn learns how the site is used. Super AI joins them, with Llama, Mistral, Qwen, Gemini and \
                  DeepSeek as independent jurors and a judge over them.",
             )),
-            ("Neuro Frenzy", Target::Soon("Neuro Frenzy is a game in the Library.")),
-            ("MD", Target::Soon("MD is the public Medicine plan.")),
+            ("Neuro Frenzy", Target::Tool(Tool::Frenzy)),
+            ("MD", Target::Tool(Tool::Md)),
         ],
     },
     Group {
@@ -440,7 +442,7 @@ const GROUPS: [Group; 5] = [
         title: "Lab",
         members: &[
             ("HAL-OS", Target::Soon("HAL-OS booted an x86 machine in your browser.")),
-            ("Unigyro", Target::Soon("Unigyro II, by Murtaza Vefadar (Gebze Technical University).")),
+            ("Unigyro", Target::Tool(Tool::Unigyro)),
         ],
     },
     Group {
@@ -1485,6 +1487,7 @@ fn group_page(gi: usize) -> N {
                 Target::Words(_) => (format!("#/i/{}/{}", gi, m), "", false),
                 Target::Data(_, d) => (format!("#/i/{}/{}", gi, m), *d, false),
                 Target::Soon(_) => (format!("#/i/{}/{}", gi, m), "Being rewritten in Rust", false),
+                Target::Tool(_) => (format!("#/i/{}/{}", gi, m), "", false),
             };
             el("a")
                 .cls("member sx-like")
@@ -1529,6 +1532,7 @@ fn item_page(s: &State, gi: usize, m: usize) -> N {
             .kid(el("p").cls("lede").style("margin-bottom:14px").text(*d))
             .kid(slot_view(&s.item, "Loading…", |v| data_view(v, 0)))
             .into(),
+        Target::Tool(t) => tool_view(s, *t),
         _ => txt(""),
     };
     el("div").kid(head(name, GROUPS[gi].title)).kid(body).into()

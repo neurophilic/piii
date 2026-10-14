@@ -115,6 +115,41 @@ const host = {
   vw: () => window.innerWidth,
   vh: () => window.innerHeight,
   capture: (on) => { capturing = !!on; document.documentElement.classList.toggle("dragging", capturing); },
+  call: (op, ol, ap, al) => { const f = ops[str(op, ol)]; return ret(f ? safe(() => f(str(ap, al)), null) : null); },
+};
+
+// Helpers with no import of their own, called by name: host.call("audio", "play\turl\tloopStart\tloopLength").
+let actx = null, song = null, songUrl = "", src = null, gain = null;
+const ops = {
+  audio: (a) => {
+    const [cmd, url, ls, ll] = a.split("\t");
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!actx) actx = new AC();
+    if (cmd === "play") {
+      if (actx.state === "suspended") actx.resume().catch(() => {});
+      if (src) { gain.gain.setTargetAtTime(0.8, actx.currentTime, 0.08); return "1"; }
+      const go = () => {
+        if (src || !song) return;
+        const d = song.getChannelData(0); let i = 0;
+        while (i < d.length && Math.abs(d[i]) < 1e-4) i++;
+        const at = i / song.sampleRate;
+        src = actx.createBufferSource(); src.buffer = song; src.loop = true;
+        src.loopStart = at; src.loopEnd = Math.min(song.duration, at + (+ll || song.duration));
+        gain = actx.createGain(); gain.gain.setValueAtTime(0, actx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.8, actx.currentTime + 0.4);
+        src.connect(gain).connect(actx.destination); src.start(actx.currentTime + 0.02, at + (+ls || 0));
+      };
+      if (song && songUrl === url) go();
+      else { songUrl = url; fetch(url).then((r) => r.arrayBuffer()).then((b) => actx.decodeAudioData(b)).then((b) => { song = b; go(); }).catch(() => {}); }
+      return "1";
+    }
+    if (cmd === "pause" && src && actx.state === "running") {
+      gain.gain.setTargetAtTime(0, actx.currentTime, 0.08);
+      setTimeout(() => { if (gain && gain.gain.value < 0.05) actx.suspend().catch(() => {}); }, 350);
+    }
+    return "1";
+  },
 };
 
 const wasm = new URL("ui.wasm" + new URL(import.meta.url).search, import.meta.url);

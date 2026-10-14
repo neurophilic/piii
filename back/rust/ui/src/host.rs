@@ -45,6 +45,7 @@ unsafe extern "C" {
     pub fn vw() -> f64;
     pub fn vh() -> f64;
     pub fn capture(on: u32);
+    pub fn call(op: *const u8, ol: usize, a: *const u8, al: usize) -> i32;
 }
 }
 
@@ -177,6 +178,9 @@ mod imp {
     pub fn capture_(on: bool) {
         unsafe { capture(on as u32) }
     }
+    pub fn call_(op: &str, a: &str) -> Option<String> {
+        answer(unsafe { call(op.as_ptr(), op.len(), a.as_ptr(), a.len()) })
+    }
 }
 
 // Outside the browser (cargo check, unit tests) the host does nothing.
@@ -219,6 +223,7 @@ mod imp {
     pub fn vw_() -> f64 { 1280.0 }
     pub fn vh_() -> f64 { 800.0 }
     pub fn capture_(_: bool) {}
+    pub fn call_(_: &str, _: &str) -> Option<String> { None }
 }
 
 pub use imp::{
@@ -236,4 +241,10 @@ pub fn fetch(req: u32, method: &str, url: &str, body: &str, form: u32) {
 
 pub fn log(s: &str) {
     imp::log__(s)
+}
+
+/// One of the host's helpers that has no import of its own (sound, drawing, pictures): `op` names it, `arg` is its
+/// text; some answer.
+pub fn call(op: &str, arg: &str) -> Option<String> {
+    imp::call_(op, arg)
 }
