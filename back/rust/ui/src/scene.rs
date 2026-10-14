@@ -702,8 +702,10 @@ fn control_icon(id: usize, s: &State) -> N {
         S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if ctl_wired(s, S_SAVE) { "ci accent" } else { "ci" }),
         S_LOCK => {
             if !s.locked {
+                // on (every super held in place): gray (owner, 2026-10-14: "when the lock icon is on, it changes color
+                // to gray")
                 el("svg:svg")
-                    .cls(if ctl_wired(s, S_LOCK) { "ci accent" } else { "ci" })
+                    .cls("ci gray")
                     .attr("viewBox", "0 0 24 24")
                     .attr("width", "26")
                     .attr("height", "26")

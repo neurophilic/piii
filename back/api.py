@@ -33,6 +33,7 @@ import random
 import re
 import requests
 import secrets
+import socket
 import shutil
 import smtplib
 import sqlite3
@@ -9027,6 +9028,70 @@ def fetch_semantic_scholar_pdf(title_or_doi):
         pass
     return None
 
+# Manuscript URLs come from visitors (Discover, a pasted link) and from third-party metadata, and the server fetches
+# them. So a fetch goes only to http(s) on public addresses, every redirect is checked the same way, and the body is
+# read in pieces up to a cap, rather than whole into memory. Before this, any URL was fetched, redirects followed,
+# which let a visitor reach the deployment's private network and hand it endless bodies.
+MAX_FETCH_BYTES = int(float(os.getenv("MAX_FETCH_MB", str(max(MAX_UPLOAD_MB, 50)))) * 1024 * 1024)
+
+
+def public_url(url: str) -> bool:
+    """True when `url` is http(s) and every address its host resolves to is a public one."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return False
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        infos = socket.getaddrinfo(parts.hostname, port, proto=socket.IPPROTO_TCP)
+    except (OSError, ValueError, UnicodeError):
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        try:
+            addr = ipaddress.ip_address(info[4][0].split("%", 1)[0])
+        except ValueError:
+            return False
+        if getattr(addr, "ipv4_mapped", None):
+            addr = addr.ipv4_mapped
+        if not addr.is_global or addr.is_multicast:
+            return False
+    return True
+
+
+def fetch_public(session, url: str, headers: dict = None, timeout: float = 15, max_bytes: int = None,
+                 redirects: int = 5):
+    """GET a public URL, checking every hop; (response, body) or (None, None). The body stops at `max_bytes`."""
+    max_bytes = max_bytes or MAX_FETCH_BYTES
+    for _ in range(redirects + 1):
+        if not public_url(url):
+            logging.info("Fetch refused, not a public http(s) address: %s", url[:200])
+            return None, None
+        res = session.get(url, headers=headers, timeout=timeout, allow_redirects=False, stream=True)
+        if res.is_redirect or res.status_code in (301, 302, 303, 307, 308):
+            nxt = res.headers.get("Location", "")
+            res.close()
+            if not nxt:
+                return None, None
+            url = urllib.parse.urljoin(url, nxt)
+            continue
+        declared = res.headers.get("Content-Length", "")
+        if declared.isdigit() and int(declared) > max_bytes:
+            res.close()
+            return None, None
+        body = bytearray()
+        for chunk in res.iter_content(chunk_size=65536):
+            body.extend(chunk)
+            if len(body) > max_bytes:
+                res.close()
+                return None, None
+        return res, bytes(body)
+    return None, None
+
+
 def download_pdf(pdf_url):
     if not pdf_url:
         return None
@@ -9055,14 +9120,17 @@ def download_pdf(pdf_url):
         "Connection": "keep-alive",
     }
 
-    try:
-        session = requests.Session()
-        res = session.get(pdf_url, headers=headers, timeout=15, allow_redirects=True)
+    def is_pdf(res, content):
         content_type = res.headers.get("Content-Type", "").lower()
-        if res.status_code == 200 and (
-            b"%PDF" in res.content[:10] or "application/pdf" in content_type
-        ):
-            return res.content
+        return res.status_code == 200 and (b"%PDF" in content[:10] or "application/pdf" in content_type)
+
+    try:
+        res, content = fetch_public(requests.Session(), pdf_url, headers=headers, timeout=15)
+        if res is not None and is_pdf(res, content):
+            return content
+        if res is None:
+            # refused (not public, too large) or a dead end; a browser-like client would get no further
+            return None
     except Exception:
         pass
 
@@ -9071,12 +9139,9 @@ def download_pdf(pdf_url):
             scraper = cloudscraper.create_scraper(
                 browser={"browser": "chrome", "platform": "windows", "desktop": True}
             )
-            res = scraper.get(pdf_url, timeout=20, allow_redirects=True)
-            content_type = res.headers.get("Content-Type", "").lower()
-            if res.status_code == 200 and (
-                b"%PDF" in res.content[:10] or "application/pdf" in content_type
-            ):
-                return res.content
+            res, content = fetch_public(scraper, pdf_url, timeout=20)
+            if res is not None and is_pdf(res, content):
+                return content
         except Exception:
             pass
 
@@ -24218,6 +24283,75 @@ class WalletVerifyRequest(BaseModel):
     signature: Optional[str] = None
 
 
+# Sign-in nonces. The message a wallet signs is written here, on the server, around a nonce that is stored and
+# accepted exactly once, for the address it was issued to, within SIGN_IN_NONCE_TTL. Before this the browser wrote
+# the message itself and the server checked only that the address had signed *something*, so any signature a
+# wallet had ever made, on any site, signed it in here, the owner's included.
+SIGN_IN_NONCE_TTL = int(os.getenv("SIGN_IN_NONCE_TTL", "600"))
+
+
+def _sign_in_nonces(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS auth_nonces (nonce TEXT PRIMARY KEY, address TEXT NOT NULL, "
+                 "message TEXT NOT NULL, expires_at REAL NOT NULL)")
+    return conn
+
+
+def issue_sign_in_message(address: str, request: Request) -> str:
+    """The exact text this address must sign to sign in (EIP-4361 layout), with a fresh single-use nonce."""
+    origin = _request_origin(request) or "https://www.piii.app"
+    domain = origin.split("://", 1)[-1]
+    nonce = secrets.token_hex(16)
+    now = datetime.now(timezone.utc)
+    iso = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    message = (
+        f"{domain} wants you to sign in with your Ethereum account:\n{address}\n\n"
+        f"Sign in to piii lab. This request does not cost anything or move any funds.\n\n"
+        f"URI: {origin}\nVersion: 1\nChain ID: 11155111\nNonce: {nonce}\n"
+        f"Issued At: {iso(now)}\nExpiration Time: {iso(now + timedelta(seconds=SIGN_IN_NONCE_TTL))}"
+    )
+    conn = _sign_in_nonces(get_db_connection())
+    try:
+        conn.execute("DELETE FROM auth_nonces WHERE expires_at < ?", (time.time(),))
+        conn.execute("INSERT INTO auth_nonces (nonce, address, message, expires_at) VALUES (?, ?, ?, ?)",
+                     (nonce, address.lower(), message, time.time() + SIGN_IN_NONCE_TTL))
+        conn.commit()
+    finally:
+        conn.close()
+    return message
+
+
+def consume_sign_in_message(address: str, message: str) -> bool:
+    """True once, for a message this server issued to this address and that has not expired."""
+    m = re.search(r"^Nonce: ([0-9a-f]{32})$", message or "", re.M)
+    if not m:
+        return False
+    conn = _sign_in_nonces(get_db_connection())
+    try:
+        row = conn.execute("SELECT address, message, expires_at FROM auth_nonces WHERE nonce = ?",
+                           (m.group(1),)).fetchone()
+        # deleted before anything else is checked, so a nonce is spent by its first use, right or wrong
+        gone = conn.execute("DELETE FROM auth_nonces WHERE nonce = ?", (m.group(1),)).rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if not row or gone != 1:
+        return False
+    stored_address, stored_message, expires_at = row
+    return (stored_address == address.lower() and hmac.compare_digest(stored_message, message)
+            and float(expires_at) >= time.time())
+
+
+@auth_router.get("/api/auth/wallet/nonce")
+def wallet_nonce(request: Request, address: str = Query(default="")):
+    """The message to sign in with: issued here, valid once, for ten minutes."""
+    check_rate_limit(get_client_ip(request), bucket="auth-nonce")
+    if not core_w3.is_address(address):
+        raise HTTPException(status_code=400, detail="Not a valid Ethereum address.")
+    clean_wallet = core_w3.to_checksum_address(address)
+    return {"address": clean_wallet, "message": issue_sign_in_message(clean_wallet, request),
+            "expires_in": SIGN_IN_NONCE_TTL}
+
+
 @auth_router.post("/api/auth/wallet/verify")
 def verify_wallet(req: WalletVerifyRequest, request: Request):
     # An authentication surface, and ECDSA recovery is not free. Unlimited
@@ -24229,13 +24363,19 @@ def verify_wallet(req: WalletVerifyRequest, request: Request):
     clean_wallet = core_w3.to_checksum_address(req.address)
     authenticated = False
     if req.signature and req.message:
+        if not consume_sign_in_message(clean_wallet, req.message):
+            add_log(f"Wallet sign-in refused, message not issued here or already used: {clean_wallet}")
+            return {
+                "address": clean_wallet, "authenticated": False, "token": "",
+                "detail": ("This sign-in message was not issued by this site, has expired or was already used. "
+                           "Start signing in again."),
+            }
         try:
-            decoded_msg = urllib.parse.unquote(req.message)
-            signable_msg = encode_defunct(text=decoded_msg)
+            signable_msg = encode_defunct(text=req.message)
             recovered = core_w3.eth.account.recover_message(signable_msg, signature=req.signature)
             authenticated = recovered.lower() == clean_wallet.lower()
         except Exception as e:
-            add_log(f"SIWE signature verification fallback: {e}")
+            add_log(f"SIWE signature verification failed: {e}")
     if not authenticated:
         # An unsigned "link" proves nothing and now grants nothing. Returning a
         # session here would recreate the exact hole this replaces.
@@ -24449,6 +24589,7 @@ def orcid_callback(request: Request, code: Optional[str] = None, state: Optional
                 "redirect_uri": resolve_orcid_redirect_uri(request),
             },
             headers={"Accept": "application/json"},
+            timeout=15,
         )
         if res.status_code == 200:
             data = res.json()

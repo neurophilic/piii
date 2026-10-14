@@ -218,6 +218,17 @@ fn ledger_apply(t: Tool, w: u8, v: Value, err: Option<String>) {
                 None => l.wmsg = v.get("detail").text().or_text("Signature verification failed, so you are not signed in."),
             }
         }
+        (Tool::Ledger, 5) => {
+            let msg = v.get("message").text();
+            if err.is_some() || msg.is_empty() {
+                l.step = Eth::Idle;
+                l.wmsg = format!("Sign-in could not start, so you are not signed in. {}", err.unwrap_or_default());
+                return;
+            }
+            l.sign_msg = msg;
+            l.wmsg = "Signing… confirm in your wallet.".into();
+            eth("personal_sign", &format!("[{},{}]", json::quote(&l.sign_msg), json::quote(&l.acct)));
+        }
         (Tool::Board, 0) => put(&mut l.lb_a, v, err),
         (Tool::Board, 1) => put(&mut l.lb_p, v, err),
         (Tool::Board, 2) => put(&mut l.author_papers, v, err),
@@ -418,17 +429,13 @@ fn eth_got(data: Vec<u8>) {
                 eth("wallet_addEthereumChain", &format!("[{}]", SEPOLIA));
                 return;
             }
-            // Signing proves control of the address; the network only matters for later settlement.
-            let nonce = (host::now() as u64).wrapping_mul(2654435761) % 100_000_000;
-            l.sign_msg = format!(
-                "ScholarPi wants you to sign in with your Ethereum account:\n{}\n\nSign in with Ethereum to authenticate session.\n\nNonce: {}\nIssued At: {}",
-                l.acct,
-                nonce,
-                iso_now()
-            );
+            // Signing proves control of the address; the network only matters for later settlement. The message to
+            // sign comes from the server, with a nonce it issued and will accept once, so a signature made anywhere
+            // else (or replayed) can not sign anybody in.
             l.step = Eth::Sign;
-            l.wmsg = "Signing… confirm in your wallet.".into();
-            eth("personal_sign", &format!("[{},{}]", json::quote(&l.sign_msg), json::quote(&l.acct)));
+            l.sign_msg.clear();
+            l.wmsg = "Preparing the sign-in message…".into();
+            request(Want::Tool(Tool::Ledger, 5), "GET", &format!("/api/auth/wallet/nonce?address={}", url_encode(&l.acct)), "", 0);
         }
         Eth::Sign => {
             if failed {
