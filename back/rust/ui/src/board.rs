@@ -115,7 +115,7 @@ fn board_save(gi: usize) {
     host::store_set(&board_key(gi), &format!("{{\"pos\":[{}],\"extra\":[{}],\"links\":[{}],\"sizes\":[{}],\"free\":[{}]}}", pos.join(","), extra.join(","), links.join(","), sizes.join(","), free.join(",")));
 }
 
-/// Unlocked by the lock, or an icon (under 5% of the window), which is never locked.
+/// Unlocked by the lock, or an icon (under 10% of the window), which is never locked.
 fn bnode_free(b: &Board, i: usize) -> bool {
     b.free.contains(&i)
 }
@@ -139,13 +139,13 @@ fn board_snap(b: &Board, from: usize, ftip: u8, at: (f64, f64)) -> Option<(usize
     best.map(|q| (q.1, q.2))
 }
 
-/// A node a double click shrinks: shown as a canvas (5% of the window or more) and unlocked.
+/// A node a double click shrinks: shown as a canvas (10% of the window or more) and unlocked.
 fn board_shrinkable(b: &Board, i: usize) -> bool {
     let (_, _, w, h) = bnode(b, i);
     !icon_area(w, h) && b.free.contains(&i)
 }
 
-/// Back to an icon, in place: its starting size, or that shape at 4% of the window. Locked again once a canvas.
+/// Back to an icon, in place: its starting size, or that shape at 8% of the window. Locked again once a canvas.
 fn board_shrink(gi: usize, i: usize) {
     let b = board(gi);
     let (_, _, w, h) = bnode(b, i);
@@ -174,7 +174,7 @@ fn bnode(b: &Board, i: usize) -> (f64, f64, f64, f64) {
             None => return (0.0, 0.0, 0.0, 0.0),
         }
     };
-    // no limit either way, as on the main canvas; under 5% of the window it is an icon
+    // no limit either way, as on the main canvas; under 10% of the window it is an icon
     (x, y, (w + gw).max(MIN_SUPER), (h + gh).max(MIN_SUPER))
 }
 
@@ -259,8 +259,8 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
                     Some((n, t)) => board_tip(gi, n, t),
                     None => {
                         let b = board(gi);
+                        // let go away from any tip: the wire just goes, without a word (owner, 2026-10-14)
                         b.held = None;
-                        b.note = "Let go on a tip, or near one, to wire it.".into();
                     }
                 }
                 s.port_press = host::now();
@@ -375,6 +375,17 @@ fn board_update(a: u16, v: String) {
         return;
     }
     // the open window: its corner resizes it, and so does the middle button on its head
+    if a == 80 || a == 81 {
+        layer_add(if a == 80 { 0 } else { 1 }, &v);
+        return;
+    }
+    if (3000..4000).contains(&a) {
+        if let Some(e) = layer().get_mut((a - 3000) as usize) {
+            e.3 = v.chars().take(60).collect();
+        }
+        layer_save();
+        return;
+    }
     if a == 66 {
         let s = st();
         reset_hold_begin();

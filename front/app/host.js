@@ -77,6 +77,21 @@ const host = {
       if (e.button !== 0 || e.target.closest("[data-solid], button, a, input, textarea, select, label")) return;
       send(id, k, e.clientX + "," + e.clientY);
     });
+    // anywhere on an open page, over text too (owner, 2026-10-14): x, y within the node, as drawn; a super's own
+    // canvas and the fields being typed in keep their own double clicks
+    else if (k === "pdbl") n.addEventListener("dblclick", (e) => {
+      if (e.target.closest("input, textarea, select, [contenteditable], .board, [data-layer]")) return;
+      e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top));
+    });
+    else if (k === "pdbl2") {
+      let last = 0;
+      n.addEventListener("contextmenu", (e) => {
+        if (e.target.closest("input, textarea, select, [contenteditable], .board, [data-layer]")) return;
+        e.preventDefault();
+        const t = Date.now();
+        if (t - last < 450) { last = 0; const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top)); } else last = t;
+      });
+    }
     else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } });
     else if (k === "dbl2") {
       let last = 0;

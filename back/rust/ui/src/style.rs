@@ -374,6 +374,12 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene,.win-body{cursor:grab}:where(.scene *,.win-body *){cursor:auto}
 .scene.panning,.scene.panning *,html.panning,html.panning *{cursor:grabbing!important}
 .ric{-webkit-user-drag:none;user-select:none}
+.win-in{position:relative;user-select:none;-webkit-user-select:none}.win-in input,.win-in textarea{user-select:text;-webkit-user-select:text}
+.page-layer{position:absolute;left:0;top:0;width:0;height:0;overflow:visible;z-index:6}
+.layer-node{position:absolute;width:88px;height:88px;box-sizing:border-box;display:grid;place-items:center}
+.layer-spark path{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}
+.layer-super{background:#fff;border:1.5px solid #2b2b2b;padding:8px}
+.layer-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;text-align:center;outline:none}.layer-in:focus{border-color:var(--accent)}
 .win.picked .win-head{cursor:grab}
 /* no scroll bar anywhere, ever; everything still scrolls (owner, 2026-10-14) */
 *{scrollbar-width:none;-ms-overflow-style:none}*::-webkit-scrollbar{display:none;width:0;height:0}

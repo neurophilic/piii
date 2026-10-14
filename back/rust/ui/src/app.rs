@@ -280,6 +280,8 @@ struct State {
     ppan: (f64, f64),
     /// the example program is on the canvas (put there by its sidebar icon; hidden again on the next visit)
     example_on: bool,
+    /// sparkles (0) and supers (1) drawn on pages, by the page's address: kind, x, y, label
+    layers: BTreeMap<String, Vec<(u8, f64, f64, String)>>,
     /// where the open window has been moved to (px from its place), once unlocked
     win_off: (f64, f64),
     /// a pan of the canvas by dragging its bare background: press x, y and the pan then
@@ -446,6 +448,7 @@ pub fn start() {
         pzoom: 1.0,
         ppan: (0.0, 0.0),
         example_on: false,
+        layers: BTreeMap::new(),
         win_off: (0.0, 0.0),
         pan_drag: None,
         port_drag: None,
@@ -603,6 +606,72 @@ pub fn on_page_pan(dx: f64, dy: f64) {
         s.ppan = (s.ppan.0 + dx, s.ppan.1 + dy);
     }
     render();
+}
+
+/// The page now open, as the key of what is drawn on it.
+fn layer_key() -> String {
+    let href = host::href();
+    format!("piii:layer:{}", fragment(&href))
+}
+
+/// What is drawn on the open page (loaded from this browser the first time).
+fn layer() -> &'static mut Vec<(u8, f64, f64, String)> {
+    let key = layer_key();
+    let s = st();
+    if !s.layers.contains_key(&key) {
+        let mut v = Vec::new();
+        if let Some(t) = host::store_get(&key) {
+            for l in t.lines() {
+                let f: Vec<&str> = l.splitn(4, '\t').collect();
+                if let [k, x, y, label] = f.as_slice() {
+                    if let (Ok(k), Ok(x), Ok(y)) = (k.parse::<u8>(), x.parse::<f64>(), y.parse::<f64>()) {
+                        v.push((k, x, y, label.to_string()));
+                    }
+                }
+            }
+        }
+        s.layers.insert(key.clone(), v);
+    }
+    st().layers.get_mut(&key).unwrap()
+}
+
+fn layer_save() {
+    let key = layer_key();
+    let out: String = layer().iter().map(|(k, x, y, l)| format!("{}\t{:.0}\t{:.0}\t{}\n", k, x, y, l.replace(['\t', '\n'], " "))).collect();
+    host::store_set(&key, &out);
+}
+
+/// A double click on an open page: a sparkle (kind 0) or, by a double right click, a super (1), centred there.
+pub fn layer_add(kind: u8, at: &str) {
+    let n: Vec<f64> = at.split(',').filter_map(|x| x.parse().ok()).collect();
+    let z = st().pzoom.max(0.01);
+    let (x, y) = (n.first().copied().unwrap_or(0.0) / z - 44.0, n.get(1).copied().unwrap_or(0.0) / z - 44.0);
+    layer().push((kind, x.max(0.0), y.max(0.0), String::new()));
+    layer_save();
+}
+
+/// What is drawn on the open page, over what it shows (it pans and zooms with it).
+fn layer_view() -> N {
+    let items = layer();
+    if items.is_empty() {
+        return txt("");
+    }
+    el("div")
+        .cls("page-layer")
+        .kids(items.iter().enumerate().map(|(i, (k, x, y, label))| -> N {
+            let base = el("div").cls("layer-node").attr("data-layer", "1").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px", x, y));
+            if *k == 0 {
+                base.cls("layer-spark")
+                    .kid(el("svg:svg").attr("viewBox", "-40 -40 80 80").attr("width", "80").attr("height", "80").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 36.0))))
+                    .into()
+            } else {
+                base.cls("layer-super")
+                    .kid(el("input").cls("layer-in").attr("type", "text").attr("aria-label", "This super's name").prop("value", label.clone()).on("input", Msg::TV(Tool::Grid, 3000 + i as u16)))
+                    .kid(ports())
+                    .into()
+            }
+        }))
+        .into()
 }
 
 /// Takes the program (its nodes and their wires) off the canvas.
@@ -1788,7 +1857,7 @@ fn rail(s: &State) -> N {
             .kid(el("span").cls("tip").text("piii lab"))
             .kid(tips(Some(RAIL[0]))),
     );
-    r = r.kid(el("span").cls("rsep"));
+    // no rule under π (owner, 2026-10-14: "delete this divider")
     let tops = [Page::Group(0), Page::Group(1), Page::Group(2), Page::Group(3), Page::Group(4), Page::Map];
     for p in tops {
         r = r.kid(icon(p, ""));
@@ -1892,7 +1961,16 @@ fn window_frame(s: &State, content: N) -> N {
                 .on("click", Msg::TV(Tool::Grid, 65))
                 .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg))),
         )
-        .kid(el("div").cls("win-body").kid(el("div").cls("win-in").attr_if(s.pzoom != 1.0 || s.ppan != (0.0, 0.0), "style", format!("zoom:{:.4};transform:translate({:.1}px,{:.1}px)", s.pzoom, s.ppan.0 / s.pzoom, s.ppan.1 / s.pzoom)).kid(content)))
+        .kid(el("div").cls("win-body").kid(
+            el("div")
+                .cls("win-in")
+                .attr_if(s.pzoom != 1.0 || s.ppan != (0.0, 0.0), "style", format!("zoom:{:.4};transform:translate({:.1}px,{:.1}px)", s.pzoom, s.ppan.0 / s.pzoom, s.ppan.1 / s.pzoom))
+                // a double click anywhere draws a sparkle, a double right click a super (owner, 2026-10-14)
+                .on("pdbl", Msg::TV(Tool::Grid, 80))
+                .on("pdbl2", Msg::TV(Tool::Grid, 81))
+                .kid(content)
+                .kid(layer_view()),
+        ))
         .kid_if(s.win_free, || el("div").cls("win-grip c").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 60)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid_if(s.win_free, || el("div").cls("win-grip r").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 63)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid_if(s.win_free, || el("div").cls("win-grip b").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 64)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())

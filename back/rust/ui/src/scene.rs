@@ -211,13 +211,12 @@ fn rail_pin(id: usize) -> Option<usize> {
     RAIL.iter().position(|x| *x == id)
 }
 
-/// Where the sidebar's i-th icon is on screen (its CSS, in numbers): π, a rule, six icons from the top; three at the
-/// foot.
+/// Where the sidebar's i-th icon is on screen (its CSS, in numbers): π and six icons from the top; three at the foot.
 fn rail_slot(i: usize, vh: f64) -> (f64, f64, f64, f64) {
     let (x, size, gap) = (20.0, 44.0, 8.0);
     let y = match i {
         0 => 22.0,
-        1..=6 => 22.0 + size + gap + 1.0 + gap + (i - 1) as f64 * (size + gap),
+        1..=6 => 22.0 + i as f64 * (size + gap),
         _ => vh - 22.0 - size - (9 - i) as f64 * (size + gap),
     };
     (x, y, size, size)
@@ -402,8 +401,8 @@ fn locked(s: &State, id: usize) -> bool {
 /// A super under this share of the window's area, as drawn now, is an icon; at or over it, a canvas (owner,
 /// 2026-10-14: "if a super is less than 10% of the screen size, then it's icon. If it's more than 10%, it's a canvas").
 /// An icon is drawn as one and is never locked; it changes as the canvas zooms or the super is resized.
-// then 5% (owner, 2026-10-14: "make the 10% rule of screen to 5% of the screen size it is shown on")
-const ICON_SHARE: f64 = 0.05;
+// 5% for a while, then 10% again (owner, 2026-10-14)
+const ICON_SHARE: f64 = 0.10;
 
 /// The smallest a super gets, in design units (a speck, but never nothing: the canvas zooms in without end to find it).
 const MIN_SUPER: f64 = 0.5;
@@ -435,10 +434,10 @@ fn shrinkable(s: &State, id: usize) -> bool {
 }
 
 /// The share of the window an icon is shrunk to when its starting size is itself a canvas.
-const SHRUNK_SHARE: f64 = 0.04;
+const SHRUNK_SHARE: f64 = 0.08;
 
 /// The size (w, h) a box of base size (bw, bh), drawn at scale k, takes as an icon: its starting size when that is
-/// an icon, else that shape at 4% of the window.
+/// an icon, else that shape at 8% of the window.
 fn icon_size(bw: f64, bh: f64, k: f64) -> (f64, f64) {
     let (vw, vh) = (host::vw(), host::vh());
     let area = bw * bh * k * k;
@@ -1847,7 +1846,6 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                     None => {
                         s.held_port = None;
                         host::capture(false);
-                        note("Let go on a tip, or near one, to wire it".to_string());
                     }
                 }
                 s.port_press = host::now();
@@ -1902,7 +1900,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 let (b, _, _) = base(host::vw() < 700.0);
                 let (bw, bh) = (b[d.id].2, b[d.id].3);
                 // no limit either way (owner, 2026-10-14: "a super can get infinitely bigger or infinitely smaller"): it only
-                // stays above nothing, so it can still be found by zooming in; under 5% of the window it is an icon
+                // stays above nothing, so it can still be found by zooming in; under 10% of the window it is an icon
                 let (w, h) = ((bw + d.size0.0 + dx).max(MIN_SUPER), (bh + d.size0.1 + dy).max(MIN_SUPER));
                 s.sizes[d.id] = (w - bw, h - bh);
                 s.dirty = true;
