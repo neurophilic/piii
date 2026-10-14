@@ -79,6 +79,7 @@ enum Msg {
     ConfirmAnswer(bool),
     Print,
     PDown(u8, String),
+    FloatDown(String),
     PMember(u8),
     Activate(u8),
     WireSel(u8),
@@ -90,6 +91,7 @@ impl crate::dom::Fill for Msg {
     fn fill(self, v: String) -> Self {
         match self {
             Msg::PDown(id, _) => Msg::PDown(id, v),
+            Msg::FloatDown(_) => Msg::FloatDown(v),
             m => m,
         }
     }
@@ -229,6 +231,9 @@ struct State {
     wires: Vec<WireT>,
     passes: Vec<PassT>,
     held_port: Option<(usize, Tip)>,
+    /// where the floating canvas was dragged to (left, top in px), and a drag of it under way
+    float_at: Option<(f64, f64)>,
+    float_drag: Option<FloatDrag>,
     pend_at: (f64, f64),
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
@@ -337,6 +342,8 @@ pub fn start() {
         wires: Vec::new(),
         passes: Vec::new(),
         held_port: None,
+        float_at: None,
+        float_drag: None,
         pend_at: (0.0, 0.0),
         wire_sel: None,
         wiring: None,
@@ -381,6 +388,7 @@ pub fn start() {
     s.name = host::store_get("sp_researcher_name").unwrap_or_default();
     *STATE.get() = Some(s);
     layout_load();
+    float_load();
     wires_load();
 
     route();
@@ -1176,6 +1184,7 @@ fn update(msg: Msg) {
         }
         Msg::Print => host::print(),
         Msg::PDown(id, xy) => begin_drag(id as usize, &xy),
+        Msg::FloatDown(xy) => float_begin(&xy),
         Msg::PMember(m) => s.pend_member = Some(m),
         Msg::Activate(id) => activate(id as usize, None),
         Msg::Port(id, t) => {

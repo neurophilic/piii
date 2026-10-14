@@ -45,20 +45,20 @@ const NSUP: usize = 19;
 
 type Rect = (f64, f64, f64, f64);
 
-/// Where each super starts, in a design canvas (wide: 1440 × 900, as the site is drawn on a laptop; narrow: a phone).
+/// Where each super starts (the controls and arrows spaced so that one's out and the next one's in do not touch), in a design canvas (wide: 1440 × 900, as the site is drawn on a laptop; narrow: a phone).
 fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
     if !narrow {
         (
             [
                 (27.0, 15.0, 206.0, 44.0),
-                (608.0, 7.0, 50.0, 48.0),
-                (666.0, 7.0, 50.0, 48.0),
-                (724.0, 7.0, 50.0, 48.0),
-                (782.0, 7.0, 50.0, 48.0),
-                (590.0, 845.0, 50.0, 48.0),
-                (648.0, 845.0, 50.0, 48.0),
-                (742.0, 845.0, 50.0, 48.0),
-                (800.0, 845.0, 50.0, 48.0),
+                (560.0, 9.0, 50.0, 48.0),
+                (644.0, 9.0, 50.0, 48.0),
+                (728.0, 9.0, 50.0, 48.0),
+                (812.0, 9.0, 50.0, 48.0),
+                (540.0, 843.0, 50.0, 48.0),
+                (624.0, 843.0, 50.0, 48.0),
+                (756.0, 843.0, 50.0, 48.0),
+                (840.0, 843.0, 50.0, 48.0),
                 (296.0, 213.0, 849.0, 474.0),
                 (325.0, 244.0, 226.0, 118.0),
                 (325.0, 381.0, 226.0, 184.0),
@@ -76,15 +76,15 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
     } else {
         (
             [
-                (14.0, 14.0, 150.0, 40.0),
-                (190.0, 14.0, 42.0, 40.0),
-                (236.0, 14.0, 42.0, 40.0),
-                (282.0, 14.0, 42.0, 40.0),
-                (328.0, 14.0, 42.0, 40.0),
-                (101.0, 792.0, 42.0, 40.0),
-                (147.0, 792.0, 42.0, 40.0),
-                (201.0, 792.0, 42.0, 40.0),
-                (247.0, 792.0, 42.0, 40.0),
+                (14.0, 14.0, 140.0, 40.0),
+                (178.0, 14.0, 36.0, 40.0),
+                (234.0, 14.0, 36.0, 40.0),
+                (290.0, 14.0, 36.0, 40.0),
+                (346.0, 14.0, 36.0, 40.0),
+                (87.0, 792.0, 36.0, 40.0),
+                (143.0, 792.0, 36.0, 40.0),
+                (211.0, 792.0, 36.0, 40.0),
+                (267.0, 792.0, 36.0, 40.0),
                 (12.0, 76.0, 366.0, 696.0),
                 (26.0, 94.0, 338.0, 92.0),
                 (26.0, 204.0, 338.0, 140.0),
@@ -181,13 +181,12 @@ fn is_ctl_super(id: usize) -> bool {
     matches!(id, S_SAVE | S_LOCK | S_CHAIN | S_RESET)
 }
 
-/// The tips a node has: the page's edges one each; the title, the controls and the arrows only an out; every other
-/// super all four.
+/// The tips a node has: the page's edges one each; every super all four (owner, 2026-10-14: "make everything
+/// wirable"), the title, the controls and the arrows too.
 fn tips_of(id: usize) -> &'static [Tip] {
     match id {
         PAGE_IN => &[Tip::Out],
         PAGE_OUT => &[Tip::In],
-        S_TITLE | S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT => &[Tip::Out],
         _ => &[Tip::In, Tip::Out, Tip::Control, Tip::Gate],
     }
 }
@@ -764,7 +763,7 @@ fn scene_view(s: &State, mini: bool) -> N {
                 // top-to-bottom wires curve (owner, 2026-10-14): leave the way the tip faces, arrive straight down
                 // into a control or straight up into a gate
                 let k = ((qy - py).abs() / 2.0).max(40.0);
-                let (c1x, c1y) = if is_ctl_super(a) && tip == Tip::Control { (px, py + k) } else { (px + k, py) };
+                let (c1x, c1y) = (px + k, py);
                 let c2y = if tip == Tip::Control { qy - k } else { qy + k };
                 format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", px, py, c1x, c1y, qx, c2y, qx, qy)
             }
@@ -867,10 +866,17 @@ fn scene_view(s: &State, mini: bool) -> N {
     stage = stage.kid(ports_svg);
     if mini {
         let (w, h) = float_size();
+        let at = match s.float_at {
+            Some((l, t)) => format!("left:{:.0}px;top:{:.0}px;right:auto;bottom:auto;", l, t),
+            None => String::new(),
+        };
         return el("aside")
             .cls("scene floating")
-            .attr("aria-label", "The canvas")
-            .style(format!("width:{:.0}px;height:{:.0}px", w, h))
+            .cls_if(s.float_drag.as_ref().map(|d| d.moved).unwrap_or(false), "moving")
+            .attr("aria-label", "The canvas: drag it anywhere")
+            .attr("title", "Drag to move")
+            .style(format!("{}width:{:.0}px;height:{:.0}px", at, w, h))
+            .on("pdown", Msg::FloatDown(String::new()))
             .kid(el("div").cls("frame"))
             .kid(stage)
             .kid(el("a").cls("pi-tab").attr("href", "#/").attr("aria-label", "Back to the whole canvas").attr("title", "The whole canvas").text("π"))
@@ -899,11 +905,9 @@ fn tip_point(g: &Geo, id: usize, tip: Tip) -> (f64, f64) {
 /// Where a wire into `into` leaves its node: a control's bottom into a control tip (it hangs from above); else the
 /// node's out.
 fn leave_point(g: &Geo, id: usize, into: Tip) -> (f64, f64) {
-    if is_ctl_super(id) && into == Tip::Control {
-        port(g, id, Side::B)
-    } else {
-        tip_point(g, id, Tip::Out)
-    }
+    // every super has a gate at its bottom now, so a control leaves by its out, on the right, like the rest
+    let _ = into;
+    tip_point(g, id, Tip::Out)
 }
 
 fn arrowhead(id: &'static str, cls: &'static str) -> N {
@@ -1235,8 +1239,72 @@ pub fn on_key(key: &str) {
     render();
 }
 
+pub struct FloatDrag {
+    sx: f64,
+    sy: f64,
+    l0: f64,
+    t0: f64,
+    moved: bool,
+}
+
+/// The floating canvas's top-left corner now, in px.
+fn float_corner(s: &State) -> (f64, f64) {
+    if let Some(p) = s.float_at {
+        return p;
+    }
+    let (w, h) = float_size();
+    let (vw, vh) = (host::vw(), host::vh());
+    if vw < 700.0 { (vw - 12.0 - w, vh - 76.0 - h) } else { (vw - 18.0 - w, vh - 18.0 - h) }
+}
+
+fn float_clamp(p: (f64, f64)) -> (f64, f64) {
+    let (w, h) = float_size();
+    let (vw, vh) = (host::vw(), host::vh());
+    (p.0.clamp(0.0, (vw - w).max(0.0)), p.1.clamp(0.0, (vh - h).max(0.0)))
+}
+
+fn float_begin(at: &str) {
+    let s = st();
+    let mut it = at.split(',');
+    let x: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let y: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let (l0, t0) = float_corner(s);
+    s.float_drag = Some(FloatDrag { sx: x, sy: y, l0, t0, moved: false });
+    host::capture(true);
+}
+
+pub fn float_load() {
+    let Some(v) = host::store_get("piii:float") else { return };
+    let mut it = v.split(',');
+    if let (Some(Ok(l)), Some(Ok(t))) = (it.next().map(|x| x.parse::<f64>()), it.next().map(|x| x.parse::<f64>())) {
+        st().float_at = Some(float_clamp((l, t)));
+    }
+}
+
 pub fn on_pointer(phase: u32, x: f64, y: f64) {
     let s = st();
+    if let Some(d) = s.float_drag.as_mut() {
+        match phase {
+            0 => {
+                if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 4.0 {
+                    d.moved = true;
+                }
+                if d.moved {
+                    let p = (d.l0 + x - d.sx, d.t0 + y - d.sy);
+                    s.float_at = Some(float_clamp(p));
+                }
+            }
+            _ => {
+                host::capture(false);
+                s.float_drag = None;
+                if let Some((l, t)) = s.float_at {
+                    host::store_set("piii:float", &format!("{:.0},{:.0}", l, t));
+                }
+            }
+        }
+        render();
+        return;
+    }
     if s.held_port.is_some() {
         // a wire being made follows the pointer until a tip is clicked
         if phase == 0 {

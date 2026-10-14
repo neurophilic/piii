@@ -279,7 +279,7 @@ box-shadow:0 10px 24px -18px rgba(25,25,25,.35)}
 .sx:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .sx.moving,html.dragging .sx{cursor:grabbing}
 .sx.moving{box-shadow:0 18px 40px -16px rgba(25,25,25,.4);z-index:2}
-.sx.title{border:2px solid #2b2b2b;display:flex;align-items:center;padding:0 22px;font:400 19px/1 "Geist Mono",ui-monospace,monospace;
+.sx.title{white-space:nowrap;border:2px solid #2b2b2b;display:flex;align-items:center;padding:0 22px;font:400 19px/1 "Geist Mono",ui-monospace,monospace;
 letter-spacing:.02em;cursor:pointer}
 .sx.ctl{border:1.5px solid #2b2b2b;display:grid;place-items:center;cursor:pointer}
 .sx.ctl:hover{background:#fff}
@@ -366,7 +366,7 @@ max-width:min(520px,calc(100% - 32px))}
 .scene.floating{position:fixed;inset:auto;right:18px;bottom:18px;z-index:30;background:var(--paper);overflow:hidden;
 box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
 .scene.floating .frame{border-width:2px}
-.scene.floating{pointer-events:none}.scene.floating .pi-tab{pointer-events:auto}.scene.floating .sx{cursor:default;box-shadow:none}
+.scene.floating{cursor:grab;touch-action:none}.scene.floating.moving{cursor:grabbing}.scene.floating .stage{pointer-events:none}.scene.floating .pi-tab{pointer-events:auto}.scene.floating .sx{cursor:default;box-shadow:none}
 
 .scene.floating .sx.lit{outline:6px solid var(--accent);outline-offset:4px;border-color:var(--accent)}
 .pi-tab{position:absolute;left:8px;bottom:8px;z-index:4;width:26px;height:26px;display:grid;place-items:center;background:var(--ink);
