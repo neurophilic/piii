@@ -935,7 +935,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         }
         sx = match id {
             S_TITLE => sx.cls("title").text("piii lab"),
-            S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT | S_RUN | S_STEP | S_CLEAR => sx.cls("ctl").attr("title", label).kid(control_icon(id, s)),
+            S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT | S_RUN | S_STEP | S_CLEAR => sx.cls("ctl").attr("title", label).kid(control_icon(id, s)).kid(ports()),
             S_PROG => sx.cls("prog").kids(prog_region_view(s)),
             S_PALETTE => sx.cls("palette").kids(palette_view()),
             S_EXAMPLES => sx.cls("examples").kids(examples_view()),
@@ -1881,35 +1881,57 @@ const fn mn(id: &'static str, label: &'static str, kind: &'static str, x: f64, y
     MapNode { id, label, kind, x, y, w, h, opens, note }
 }
 
-// pitechlab.sasm, `map`: the whole project as one super's inside
-const MAP: [MapNode; 24] = [
-    mn("prompt", "Prompt", "in", 20.0, 120.0, 150.0, 64.0, "", ""),
-    mn("superai", "Super AI", "ai", 210.0, 128.0, 96.0, 48.0, "", ""),
-    mn("sim", "siM", "lab", 350.0, 20.0, 74.0, 40.0, "#/i/2/4", ""),
-    mn("rib", "riB", "lab", 350.0, 76.0, 74.0, 40.0, "#/i/2/4", ""),
-    mn("pid", "piD", "lab", 350.0, 132.0, 74.0, 40.0, "#/i/1/6", ""),
-    mn("pien", "PiEn", "lab", 350.0, 188.0, 74.0, 40.0, "#/i/2/4", ""),
+// The whole project as one super's inside (pitechlab.sasm, `map`; brought up to date 2026-10-14): one prompt to
+// every engine, the assessment from manuscript to ledger, the lab's own tools, and what it all runs on.
+const MAP: [MapNode; 41] = [
+    // one prompt, every engine
+    mn("prompt", "Prompt", "in", 20.0, 120.0, 150.0, 64.0, "#/i/1/3", ""),
+    mn("superai", "Super AI", "ai", 210.0, 128.0, 96.0, 48.0, "#/i/1/3", ""),
+    mn("sim", "siM", "lab", 350.0, 20.0, 74.0, 40.0, "#/i/2/4", "SciM"),
+    mn("rib", "riB", "lab", 350.0, 76.0, 74.0, 40.0, "#/i/2/0", "RiBD"),
+    mn("pid", "piD", "lab", 350.0, 132.0, 74.0, 40.0, "#/i/1/7", "forecast"),
+    mn("pien", "PiEn", "lab", 350.0, 188.0, 74.0, 40.0, "#/i/1/7", "next step"),
     mn("llama", "Llama", "out", 470.0, 8.0, 74.0, 40.0, "", ""),
     mn("mistral", "Mistral", "out", 470.0, 58.0, 74.0, 40.0, "", ""),
     mn("qwen", "Qwen", "out", 470.0, 108.0, 74.0, 40.0, "", ""),
     mn("gemini", "Gemini", "out", 470.0, 158.0, 74.0, 40.0, "", ""),
     mn("deepseek", "DeepSeek", "out", 470.0, 208.0, 74.0, 40.0, "", ""),
     mn("judge", "Judge", "judge", 600.0, 108.0, 74.0, 40.0, "", ""),
-    mn("answer", "Answer", "sink", 720.0, 70.0, 160.0, 118.0, "", ""),
+    mn("answer", "Answer", "sink", 720.0, 70.0, 160.0, 118.0, "#/i/1/3", ""),
     mn("live", "Live", "site", 906.0, 20.0, 74.0, 40.0, "#/live", ""),
-    mn("traffic", "Traffic", "site", 906.0, 200.0, 74.0, 40.0, "#/i/1/5", ""),
+    mn("traffic", "Analytics", "site", 906.0, 200.0, 74.0, 40.0, "#/i/1/6", ""),
+    // the assessment
     mn("manuscript", "Manuscript", "in", 20.0, 330.0, 92.0, 46.0, "#/assess", ""),
-    mn("extract", "Extract", "step", 132.0, 333.0, 88.0, 40.0, "", "PDF → text"),
-    mn("integrity", "Integrity", "step", 238.0, 333.0, 88.0, 40.0, "", "MDAR · RRID"),
-    mn("jurors", "Jurors", "step", 344.0, 333.0, 88.0, 40.0, "", ""),
-    mn("verdict", "Verdict", "judge", 450.0, 333.0, 88.0, 40.0, "", "the judge"),
-    mn("pix", "piX", "step", 556.0, 333.0, 88.0, 40.0, "/ScholarPi_Whitepaper.pdf", ""),
+    mn("extract", "Extract", "step", 132.0, 333.0, 88.0, 40.0, "#/i/2/3", "PDF → text"),
+    mn("integrity", "Integrity", "step", 238.0, 333.0, 88.0, 40.0, "#/i/2/3", "MDAR · RRID"),
+    mn("jurors", "Jurors", "step", 344.0, 333.0, 88.0, 40.0, "#/i/2/3", ""),
+    mn("verdict", "Verdict", "judge", 450.0, 333.0, 88.0, 40.0, "#/i/2/3", "the judge"),
+    mn("pix", "piX", "step", 556.0, 333.0, 88.0, 40.0, "#/i/2/2", ""),
     mn("piq", "piQ", "step", 662.0, 333.0, 88.0, 40.0, "#/library", ""),
-    mn("ledger", "Ledger", "step", 768.0, 333.0, 88.0, 40.0, "#/i/1/3", ""),
-    mn("explorer", "Explorer", "sink", 874.0, 333.0, 106.0, 40.0, "#/explore", ""),
+    mn("ledger", "Ledger", "step", 768.0, 333.0, 88.0, 40.0, "#/i/1/4", ""),
+    mn("explorer", "Explorer", "sink", 874.0, 333.0, 106.0, 40.0, "#/i/1/4", ""),
+    // the lab: what runs here, in the browser
+    mn("canvas", "Canvas", "lab", 20.0, 470.0, 104.0, 44.0, "#/", "supers · wires"),
+    mn("program", "Program", "lab", 144.0, 470.0, 104.0, 44.0, "#/", "dataflow"),
+    mn("learn", "SuperAI", "lab", 268.0, 470.0, 104.0, 44.0, "#/i/2/8", "learn to program"),
+    mn("hal", "HAL-OS", "lab", 392.0, 470.0, 104.0, 44.0, "#/i/3/1", "x86 · ternary net"),
+    mn("quvi", "QuVI", "lab", 516.0, 470.0, 104.0, 44.0, "#/i/3/0", "quantum circuits"),
+    mn("face", "FaceMace", "lab", 640.0, 470.0, 104.0, 44.0, "#/i/0/2", "faces, sorted"),
+    mn("map", "Map of Science", "lab", 764.0, 470.0, 104.0, 44.0, "#/i/2/1", "and its game"),
+    mn("frenzy", "Neuro Frenzy", "lab", 888.0, 470.0, 92.0, 44.0, "#/i/2/6", ""),
+    // what it runs on
+    mn("browser", "Browser", "in", 20.0, 610.0, 92.0, 44.0, "", ""),
+    mn("host", "host.js", "step", 132.0, 612.0, 88.0, 40.0, "", "DOM · fetch"),
+    mn("wasm", "ui.wasm", "ai", 240.0, 612.0, 110.0, 40.0, "", "Rust, no_std"),
+    mn("api", "API", "step", 400.0, 612.0, 100.0, 40.0, "", "Python · FastAPI"),
+    mn("db", "SQLite", "step", 540.0, 612.0, 88.0, 40.0, "", "corpus · piQ"),
+    mn("chain", "Sepolia", "step", 668.0, 612.0, 88.0, 40.0, "#/i/1/4", "settlement"),
+    mn("providers", "Model providers", "out", 796.0, 612.0, 110.0, 40.0, "", ""),
+    mn("orcid", "ORCID", "out", 926.0, 612.0, 54.0, 40.0, "#/account", ""),
+    mn("owner", "Owner", "sink", 926.0, 560.0, 54.0, 30.0, "#/i/4/5", ""),
 ];
 
-const MAP_WIRES: [(&str, &str); 28] = [
+const MAP_WIRES: [(&str, &str); 36] = [
     ("prompt", "superai"),
     ("superai", "sim"),
     ("superai", "rib"),
@@ -1935,17 +1957,30 @@ const MAP_WIRES: [(&str, &str); 28] = [
     ("pix", "piq"),
     ("piq", "ledger"),
     ("ledger", "explorer"),
-    ("pix", "pid"),
-    ("pix", "rib"),
-    ("ledger", "live"),
+    ("canvas", "program"),
+    ("program", "learn"),
+    ("learn", "hal"),
+    ("browser", "host"),
+    ("host", "wasm"),
+    ("wasm", "api"),
+    ("api", "db"),
+    ("db", "chain"),
+    ("chain", "providers"),
+    ("wasm", "canvas"),
+    ("orcid", "owner"),
 ];
 
-const MAP_SECTIONS: [(&str, f64, f64, f64, f64); 3] =
-    [("one prompt, every engine", 14.0, 0.0, 972.0, 270.0), ("the assessment", 14.0, 300.0, 972.0, 110.0), ("the site", 14.0, 470.0, 972.0, 100.0)];
+const MAP_SECTIONS: [(&str, f64, f64, f64, f64); 5] = [
+    ("one prompt, every engine", 14.0, 0.0, 972.0, 270.0),
+    ("the assessment", 14.0, 300.0, 972.0, 110.0),
+    ("the lab, in the browser", 14.0, 440.0, 972.0, 96.0),
+    ("what it runs on", 14.0, 566.0, 972.0, 110.0),
+    ("the site", 14.0, 706.0, 972.0, 80.0),
+];
 
 fn map_page() -> N {
     let find = |id: &str| MAP.iter().find(|n| n.id == id);
-    let mut svg = el("svg:svg").cls("map").attr("viewBox", "0 -24 1000 604").attr("role", "img").attr("aria-label", "The project map");
+    let mut svg = el("svg:svg").cls("map").attr("viewBox", "0 -24 1000 824").attr("role", "img").attr("aria-label", "The project map");
     for (label, x, y, w, h) in MAP_SECTIONS {
         svg = svg
             .kid(el("svg:rect").cls("m-sec").attr("x", format!("{}", x)).attr("y", format!("{}", y)).attr("width", format!("{}", w)).attr("height", format!("{}", h)))
@@ -1954,16 +1989,24 @@ fn map_page() -> N {
     for (a, b) in MAP_WIRES {
         let (Some(na), Some(nb)) = (find(a), find(b)) else { continue };
         // into the node's left edge, or its top/bottom when it sits above or below
-        let pa = (na.x + na.w, na.y + na.h / 2.0);
-        let (pb, sb) = if nb.x > na.x + na.w {
-            ((nb.x, nb.y + nb.h / 2.0), Side::L)
-        } else if nb.y < na.y {
-            ((nb.x + nb.w / 2.0, nb.y + nb.h), Side::B)
+        // across a row out of the right into the left; between rows out of the top or bottom, straight up or down
+        let sec = |y: f64| MAP_SECTIONS.iter().position(|q| y >= q.2 && y <= q.2 + q.4).unwrap_or(0);
+        let across = sec(na.y) != sec(nb.y);
+        let (pa, sa, pb, sb) = if across && nb.y + nb.h < na.y {
+            ((na.x + na.w / 2.0, na.y), Side::T, (nb.x + nb.w / 2.0, nb.y + nb.h), Side::B)
+        } else if across && nb.y > na.y + na.h {
+            ((na.x + na.w / 2.0, na.y + na.h), Side::B, (nb.x + nb.w / 2.0, nb.y), Side::T)
         } else {
-            ((nb.x + nb.w / 2.0, nb.y), Side::T)
+            ((na.x + na.w, na.y + na.h / 2.0), Side::R, (nb.x, nb.y + nb.h / 2.0), Side::L)
         };
         let data = sb == Side::L;
-        svg = svg.kid(el("svg:path").cls(if data { "w data" } else { "w" }).attr("d", if data { curve(pa, Side::R, pb, Side::L) } else { curve(pa, Side::R, pb, sb) }));
+        let d = if sa == Side::T || sa == Side::B {
+            let my = (pa.1 + pb.1) / 2.0;
+            format!("M{:.1} {:.1}C{:.1} {:.1} {:.1} {:.1} {:.1} {:.1}", pa.0, pa.1, pa.0, my, pb.0, my, pb.0, pb.1)
+        } else {
+            curve(pa, Side::R, pb, Side::L)
+        };
+        svg = svg.kid(el("svg:path").cls(if data { "w data" } else { "w" }).attr("d", d));
     }
     let mut stars = String::new();
     for n in MAP.iter() {
@@ -1974,7 +2017,7 @@ fn map_page() -> N {
     for n in MAP.iter() {
         let mut gnode = el("svg:g").cls("m-node").cls(n.kind);
         gnode = gnode
-            .kid(el("svg:rect").attr("x", format!("{}", n.x)).attr("y", format!("{}", n.y)).attr("width", format!("{}", n.w)).attr("height", format!("{}", n.h)))
+            .kid(el("svg:rect").attr("x", format!("{}", n.x)).attr("y", format!("{}", n.y)).attr("width", format!("{}", n.w)).attr("height", format!("{}", n.h)).attr("rx", format!("{:.0}", (n.h * 0.3).min(14.0))))
             .kid(el("svg:text").attr("x", format!("{}", n.x + n.w / 2.0)).attr("y", format!("{}", n.y + n.h / 2.0 + if n.note.is_empty() { 5.0 } else { -2.0 })).attr("text-anchor", "middle").text(n.label));
         if !n.note.is_empty() {
             gnode = gnode.kid(el("svg:text").cls("m-note").attr("x", format!("{}", n.x + n.w / 2.0)).attr("y", format!("{}", n.y + n.h / 2.0 + 13.0)).attr("text-anchor", "middle").text(n.note));
@@ -1996,14 +2039,14 @@ fn map_page() -> N {
             el("svg:a").attr("href", format!("#/g/{}", group_of(g.sup).unwrap_or(0))).cls("m-link").kid(
                 el("svg:g")
                     .cls("m-node site")
-                    .kid(el("svg:rect").attr("x", format!("{}", x)).attr("y", "500").attr("width", format!("{}", w)).attr("height", "40"))
-                    .kid(el("svg:text").attr("x", format!("{}", x + w / 2.0)).attr("y", "525").attr("text-anchor", "middle").text(g.title)),
+                    .kid(el("svg:rect").attr("x", format!("{}", x)).attr("y", "726").attr("width", format!("{}", w)).attr("height", "40").attr("rx", "12"))
+                    .kid(el("svg:text").attr("x", format!("{}", x + w / 2.0)).attr("y", "751").attr("text-anchor", "middle").text(g.title)),
             ),
         );
         x += w + 42.0;
     }
     el("div")
-        .kid(head("Project", "The whole project as one super's inside: one prompt to every engine, the assessment from manuscript to ledger, and the site."))
+        .kid(head("Project", "The whole project as one super's inside: one prompt to every engine, the assessment from manuscript to ledger, the lab's tools in the browser, what it all runs on, and the site. Click a box to open it."))
         .kid(el("div").cls("map-wrap").kid(svg))
         .into()
 }
