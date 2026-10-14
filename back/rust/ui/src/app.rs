@@ -253,6 +253,10 @@ struct State {
     quvi: Quvi,
     face: Face,
     smap: SciMap,
+    studio: Studio,
+    scim: Scim,
+    modal: Option<Modal>,
+    rev: Rev,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -284,7 +288,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -374,6 +378,10 @@ pub fn start() {
         quvi: Quvi::default(),
         face: Face::default(),
         smap: SciMap::default(),
+        studio: Studio::default(),
+        scim: Scim::default(),
+        modal: None,
+        rev: Rev::default(),
         prog: Prog::default(),
     };
 
@@ -431,6 +439,9 @@ pub fn start() {
     host::timer(400, T_PI);
     request(Want::Session, "GET", "/api/auth/session", "", 0);
     request(Want::Tool(Tool::Perf, 6), "GET", "/api/pien/model", "", 0);
+    if signed_in(st()) {
+        jobs_watch(true);
+    }
     request(Want::Emission, "GET", "/api/emission", "", 0);
     request(Want::Trial, "GET", "/api/trial/status", "", 0);
     if st().consent.map(|c| c[0]).unwrap_or(false) {
@@ -482,6 +493,7 @@ pub fn on_timer(token: u32) {
         }
         T_NOTE => s.note.clear(),
         T_NF => frenzy_tick(),
+        T_JOBS => jobs_tick(),
         T_MAP => {
             map_frame();
             return;
@@ -712,6 +724,11 @@ fn load() {
                     s.piq.busy = true;
                     let u = format!("/api/user/piq-total?{}", ident_query(s));
                     request(Want::Piq, "GET", &u, "", 0);
+                }
+                if s.rev.claimable.needed() {
+                    s.rev.claimable.busy = true;
+                    let u = format!("/api/assessments/claimable?{}", ident_query(s));
+                    request(Want::Tool(Tool::Rev, 21), "GET", &u, "", 0);
                 }
                 if s.mine.needed() {
                     s.mine.busy = true;
@@ -1347,7 +1364,7 @@ fn view(s: &State) -> N {
         // website always")
         el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
     };
-    el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).into()
+    el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).kid(modal_view(s)).kid(toasts_view(s)).into()
 }
 
 
@@ -2355,7 +2372,7 @@ fn journal_list(rows: &[Value]) -> N {
 
 fn paper_page(s: &State) -> N {
     let body = slot_view(&s.dossier, "Loading the dossier…", |d| {
-        el("div").cls("stack").kid(dossier_view(d)).into()
+        el("div").cls("stack").kid_if(!badges(d).is_empty(), || el("div").cls("row").kids(badges(d)).into()).kid(dossier_view(d)).kid_if(signed_in(st()), || authorship_actions(d)).into()
     });
     el("div").kid(body).into()
 }
@@ -2750,13 +2767,7 @@ fn account_page(s: &State) -> N {
             .kid(stat(p.get("papers_affordable").text(), "papers you can afford"))
             .into()
     }));
-    col = col.kid(el("h2").style("margin:8px 0 12px").text("Your assessments")).kid(slot_view(&s.mine, "Loading your assessments…", |m| {
-        let rows = m.get("assessments").arr();
-        if rows.is_empty() {
-            return empty("None yet. Assess a paper and it will appear here.");
-        }
-        paper_list(rows, "timestamp", "author_name")
-    }));
+    col = col.kid(claimable_view(s)).kid(el("h2").style("margin:8px 0 12px").text("Your assessments")).kid(history_view(s));
     col.into()
 }
 
@@ -2771,6 +2782,8 @@ include!("tools2.rs");
 include!("quvi.rs");
 include!("facemace.rs");
 include!("sciencemap.rs");
+include!("studio.rs");
+include!("reviews.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {

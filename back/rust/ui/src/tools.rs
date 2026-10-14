@@ -24,6 +24,12 @@ pub enum Tool {
     Face,
     // sciencemap.rs
     Map,
+    // studio.rs
+    Profile,
+    Buddy,
+    Scim,
+    // reviews.rs
+    Rev,
 }
 
 /// What every tool keeps.
@@ -53,6 +59,10 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Quvi => quvi_view(s),
         Tool::Face => face_view(s),
         Tool::Map => map_view(s),
+        Tool::Profile => profile_view(s),
+        Tool::Buddy => buddy_view(s),
+        Tool::Scim => scim_view(s),
+        Tool::Rev => txt(""),
     }
 }
 
@@ -72,6 +82,12 @@ fn tool_load(t: Tool) {
     if t == Tool::Map {
         map_load();
     }
+    if matches!(t, Tool::Profile | Tool::Buddy) {
+        studio_load();
+    }
+    if t == Tool::Scim {
+        scim_load();
+    }
     tools2_load(t);
 }
 
@@ -79,6 +95,12 @@ fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
     let s = st();
     if t == Tool::Md {
         put(&mut s.t.md, v, err);
+    } else if t == Tool::Rev {
+        rev_apply(what, v, err);
+    } else if t == Tool::Scim {
+        scim_apply(what, v, err);
+    } else if matches!(t, Tool::Profile | Tool::Buddy) {
+        studio_apply(what, v, err);
     } else if t == Tool::Map {
         map_apply(what, v, err);
     } else if t == Tool::Face {
@@ -97,6 +119,9 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Quvi => quvi_update(a, v),
         Tool::Face => face_update(a, v),
         Tool::Map => map_update(a, v),
+        Tool::Profile | Tool::Buddy => studio_update(a, v),
+        Tool::Scim => scim_update(a, v),
+        Tool::Rev => rev_update(a, v),
         _ => tools2_update(t, a, v),
     }
 }

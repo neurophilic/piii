@@ -471,10 +471,11 @@ const GROUPS: [Group; 5] = [
         sup: S_LIBRARY,
         title: "Library",
         members: &[
-            ("RiBD", Target::Data("/api/buddy/suggest", "Papers to read, suggested for your profile.")),
+            ("RiBD", Target::Tool(Tool::Buddy)),
             ("The Global Map of Science", Target::Tool(Tool::Map)),
             ("Whitepaper", Target::Url("/ScholarPi_Whitepaper.pdf")),
             ("Architecture", Target::Tool(Tool::Arch)),
+            ("SciM Assistant", Target::Tool(Tool::Scim)),
             ("Capabilities", Target::Words(
                 "siM is the lab's own assistant model. riB learns which papers are worth reading. piD forecasts from the \
                  ledger. PiEn learns how the site is used. Super AI joins them, with Llama, Mistral, Qwen, Gemini and \
@@ -501,7 +502,7 @@ const GROUPS: [Group; 5] = [
         members: &[
             ("Your account", Target::Hash("#/account")),
             ("Your assessments", Target::Hash("#/account")),
-            ("Research profile", Target::Data("/api/profile", "What you told the site about your research.")),
+            ("Research profile", Target::Tool(Tool::Profile)),
             ("piQ held for you", Target::Data("/api/assessments/claimable", "piQ held in escrow until you claim it.")),
             ("Assessment results", Target::Hash("#/assess")),
             ("Reset platform", Target::Soon("Resetting the platform is for the owner.")),
