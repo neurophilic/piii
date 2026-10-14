@@ -287,7 +287,7 @@ box-shadow:0 10px 24px -18px rgba(25,25,25,.35)}
 letter-spacing:.02em;cursor:pointer}
 .sx.ctl{border:1.5px solid #2b2b2b;display:grid;place-items:center;cursor:pointer}
 .sx.ctl:hover{background:#fff}
-.ci{color:var(--ink)}.ci.accent{color:var(--accent)}.ci.faint{color:#b8b8b3}
+.ci{color:var(--ink)}.ci.accent{color:var(--accent)}.ci.faint{color:#b8b8b3}.ci.gray{color:#8c8c87}
 .sx.words{padding:12px 10px;font-size:12.4px;line-height:1.38;color:var(--ink);background:#fff;cursor:pointer}
 .sx.pchip{display:grid;place-items:center;font-size:14.5px;border:1.2px solid #2b2b2b;background:#fff;cursor:pointer}
 .sx.hold{background:transparent;border:1px solid #b9b9b4;box-shadow:none;pointer-events:none}
@@ -366,7 +366,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .sx.locked{cursor:default}
 .sx.picked,.bnode.picked{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 7px var(--accent-soft)}
 /* wiring: the pointer says what a click will do (owner, 2026-10-14: "improve the wiring experience with pointer change") */
-.ports-svg .port.out{cursor:crosshair}.ports-svg .port.tip{cursor:help}
+.ports-svg .port.out{cursor:crosshair}
 .scene.wiring,.scene.wiring .sx,.board.holding,.board.holding .bnode{cursor:crosshair}
 .scene.wiring .ports-svg .port.target,.board-ports.holding .port.target{cursor:copy}
 .scene.wiring .ports-svg .port.target .mark,.board-ports.holding .port.target .mark{transform-box:fill-box;transform-origin:center;animation:tippulse 1s ease-in-out infinite}
