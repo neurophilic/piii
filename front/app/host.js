@@ -66,12 +66,17 @@ const host = {
       const ev = { mdown: "pointerdown", mmove: "pointermove", mup: "pointerup", mwheel: "wheel" }[k];
       n.addEventListener(ev, (e) => {
         const r = n.getBoundingClientRect(), at = (e.clientX - r.left) + "," + (e.clientY - r.top) + "," + r.width + "," + r.height;
-        if (k === "mwheel") { e.preventDefault(); send(id, k, e.deltaY + "," + at); return; }
+        if (k === "mwheel") { e.preventDefault(); send(id, k, e.deltaY + "," + at + "," + e.deltaX); return; }
         if (k === "mdown") { if (e.button !== 0 || e.target.closest("button, a, input, select")) return; try { n.setPointerCapture(e.pointerId); } catch (_) {} }
         send(id, k, at);
       }, k === "mwheel" ? { passive: false } : undefined);
       if (k === "mup") n.addEventListener("pointercancel", (e) => { const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top) + "," + r.width + "," + r.height); });
     }
+    // a press on the bare background (nothing solid under it): the canvas pans from here
+    else if (k === "bgdown") n.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("[data-solid], button, a, input, textarea, select, label")) return;
+      send(id, k, e.clientX + "," + e.clientY);
+    });
     else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } });
     else if (k === "dbl2") {
       let last = 0;
@@ -283,4 +288,45 @@ addEventListener("keyup", (e) => { if (STEER.has(e.key)) { const [p, l] = put("-
 addEventListener("pointermove", (e) => { if (capturing) W.pointer(0, e.clientX, e.clientY); });
 addEventListener("pointerup", (e) => { if (capturing) W.pointer(1, e.clientX, e.clientY); });
 addEventListener("pointercancel", (e) => { if (capturing) W.pointer(2, e.clientX, e.clientY); });
+// Zoom is piii's own, the same everywhere, and never the browser's (owner, 2026-10-14): a pinch, Ctrl/⌘ and the wheel,
+// or Ctrl/⌘ with +, − or 0 zoom what is shown (the canvas, or the open page) and the browser's zoom stays as it is.
+const zoomBy = (dy, x, y) => W.zoomed(dy, x, y);
+addEventListener("wheel", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault(); e.stopPropagation(); zoomBy(e.deltaY, e.clientX, e.clientY);
+}, { passive: false, capture: true });
+addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = e.key, cx = innerWidth / 2, cy = innerHeight / 2;
+  if (k === "+" || k === "=") { e.preventDefault(); zoomBy(-200, cx, cy); }
+  else if (k === "-" || k === "_") { e.preventDefault(); zoomBy(200, cx, cy); }
+  else if (k === "0") { e.preventDefault(); zoomBy(0, cx, cy); }
+}, { capture: true });
+let gscale = 1;
+addEventListener("gesturestart", (e) => { e.preventDefault(); gscale = 1; });
+addEventListener("gesturechange", (e) => { e.preventDefault(); const r = e.scale / gscale; gscale = e.scale; zoomBy(-Math.log(r) / 0.0015, e.clientX, e.clientY); });
+let pinch = 0;
+addEventListener("touchmove", (e) => {
+  if (e.touches.length !== 2) { pinch = 0; return; }
+  e.preventDefault();
+  const [a, b] = e.touches, d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  if (pinch) zoomBy(-Math.log(d / pinch) / 0.0015, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+  pinch = d;
+}, { passive: false });
+addEventListener("touchend", () => { pinch = 0; });
+// A drag on the bare background of an open page pans it (it scrolls, with no scroll bar shown).
+addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !e.target.closest) return;
+  const body = e.target.closest(".win-body");
+  if (!body || e.target.closest("[data-solid], button, a, input, textarea, select, label, [contenteditable], .ports-svg, .board-ports")) return;
+  const x0 = e.clientX, y0 = e.clientY, l0 = body.scrollLeft, t0 = body.scrollTop;
+  let moved = false;
+  const mv = (ev) => {
+    const dx = ev.clientX - x0, dy = ev.clientY - y0;
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+    moved = true; body.scrollLeft = l0 - dx; body.scrollTop = t0 - dy;
+  };
+  const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
+  addEventListener("pointermove", mv); addEventListener("pointerup", up);
+});
 W.start();

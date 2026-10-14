@@ -27118,7 +27118,7 @@ def rust_loader() -> str:
         with open(os.path.join(_FRONTEND_DIR, "app", name), "rb") as fh:
             h.update(fh.read())
     return ('<!doctype html><html lang="en"><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Piii Lab</title>'
+            '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Piii Lab</title>'
             '<meta name="theme-color" content="#f7f5ef"><link rel="icon" href="/icon.svg">'
             '<link rel="manifest" href="/manifest.webmanifest">'
             f'<script type="module" src="/app/host.js?v={h.hexdigest()[:12]}"></script></html>')

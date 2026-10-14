@@ -56,6 +56,12 @@ pub extern "C" fn ret(len: usize) -> *mut u8 {
     host::ret_buffer(len)
 }
 
+/// Zoom asked for anywhere (a pinch, Ctrl/⌘ and the wheel, Ctrl/⌘ +, − or 0): deltaY (0 resets), and the point.
+#[unsafe(no_mangle)]
+pub extern "C" fn zoomed(dy: f64, x: f64, y: f64) {
+    app::on_zoom(dy, x, y);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     app::start();
