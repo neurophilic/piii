@@ -762,7 +762,14 @@ fn scene_view(s: &State, mini: bool) -> N {
                 let bus = (reach + qx) / 2.0;
                 format!("M{:.1},{:.1} H{:.1} V{:.1} H{:.1}", px, py, bus, qy, qx)
             }
-            _ => format!("M{:.1},{:.1} V{:.1} H{:.1} V{:.1}", px, py, (py + qy) / 2.0, qx, qy),
+            _ => {
+                // top-to-bottom wires curve (owner, 2026-10-14): leave the way the tip faces, arrive straight down
+                // into a control or straight up into a gate
+                let k = ((qy - py).abs() / 2.0).max(40.0);
+                let (c1x, c1y) = if is_ctl_super(a) && tip == Tip::Control { (px, py + k) } else { (px + k, py) };
+                let c2y = if tip == Tip::Control { qy - k } else { qy + k };
+                format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", px, py, c1x, c1y, qx, c2y, qx, qy)
+            }
         };
         wires = draw_link(wires, mini, s.wire_sel == Some(i), i, &d, tip);
     }
@@ -772,15 +779,16 @@ fn scene_view(s: &State, mini: bool) -> N {
         // out of its tip (up from a control, down from a gate), round by a lane left of both, and into the other tip
         // from outside, clear of everything between
         let away = |t: Tip| if t == Tip::Control { -40.0 } else { 40.0 };
-        let left = |id: usize| if id < NSUP { g.rects[id].0 } else { px.min(qx) };
-        let lane = left(a).min(left(b)) - 60.0;
+        // curved too (owner, 2026-10-14): one sweep, leaving and arriving the way each tip faces
+        let k = (((qy - py).abs() + (qx - px).abs()) / 80.0).max(1.5);
         let d = format!(
-            "M{:.1},{:.1} V{:.1} H{:.1} V{:.1} H{:.1} V{:.1}",
+            "M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}",
             px,
             py,
-            py + away(ta),
-            lane,
-            qy + away(tb),
+            px,
+            py + away(ta) * k,
+            qx,
+            qy + away(tb) * k,
             qx,
             qy
         );
