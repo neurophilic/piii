@@ -51,7 +51,7 @@ The canvas is a working dataflow language, like LabVIEW's block diagram, and it 
   - **out** feeds any number of tips.
 - **Running:**
   - ▶ runs step after step. In each step every node computes once, in wire order, and then every register takes its new value. The run ends at a `stop`, when the registers settle, or after 100 000 steps.
-  - ⏭ runs one step, and ⏹ clears.
+  - ⏹ clears.
 - **Loops** must pass through a register; any other loop is refused.
 - **Why it is Turing complete:** registers hold any value, lists grow and are read and written anywhere, and gates choose.
 

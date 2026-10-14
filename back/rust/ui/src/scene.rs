@@ -196,9 +196,10 @@ const START_PASSES: [PassT; 4] = [
     (S_LIBRARY, Tip::Gate, S_PROJECT, Tip::Control),
 ];
 
-/// Supers taken off the canvas (owner, 2026-10-14: the arrows, "delete these icons"); the title still moves the view.
+/// Supers taken off the canvas (owner, 2026-10-14: the arrows, "delete these icons"; then the one-step button,
+/// "delete this"); the title still moves the view, and Run still runs a program.
 fn is_gone(id: usize) -> bool {
-    matches!(id, S_LEFT | S_UP | S_DOWN | S_RIGHT)
+    matches!(id, S_LEFT | S_UP | S_DOWN | S_RIGHT | S_STEP)
 }
 
 fn is_ctl_super(id: usize) -> bool {

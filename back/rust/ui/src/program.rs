@@ -28,7 +28,7 @@
 // RUNNING. ▶ runs the program step after step: in each step every node computes once, in the order of the wires
 // (registers give what they held at the start of the step), then every register takes its new value. The run ends
 // when a stop node gets true, when the registers stop changing, or after 100 000 steps; with no register it is a
-// single step. ⏭ runs one step; ⏹ empties the registers and values.
+// single step. ⏹ empties the registers and values.
 //
 // TURING COMPLETE. Registers hold any value, lists grow without bound (push) and are read and written anywhere
 // (at, set), and gates choose: a register holding a tape (a list), one holding the head, one holding the state, and
@@ -853,7 +853,7 @@ fn example_load(i: usize) {
             st().wires.push((*a, *b, t));
         }
     }
-    st().prog.status = format!("{}: press ▶ to run it, ⏭ to step.", name);
+    st().prog.status = format!("{}: press ▶ to run it, ⏹ to clear.", name);
     prog_save();
 }
 
