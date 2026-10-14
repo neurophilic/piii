@@ -234,7 +234,15 @@ struct State {
     /// the canvas's zoom (1 = fits the window)
     zoom: f64,
     pan: (f64, f64),
-    locked: bool,
+    /// every canvas is locked: it stays where it is and keeps its size. A super, a program node, the floating canvas or
+    /// the open window is unlocked by selecting it and clicking the lock (owner, 2026-10-14: "to unlock a canvas, you
+    /// have to first select it and select the lock to unlock it"). These are the main canvas's unlocked ones.
+    free: Vec<usize>,
+    float_free: bool,
+    win_free: bool,
+    /// the floating canvas or the open window selected by a click, for the lock
+    float_pick: bool,
+    win_pick: bool,
     chained: bool,
     dirty: bool,
     drag: Option<Drag>,
@@ -263,6 +271,8 @@ struct State {
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
     note: String,
+    /// when the note was set: an older note's timer does not clear a newer one
+    note_at: f64,
     /// the tools that were JavaScript (tools.rs)
     t: Tools,
     t2: Tools2,
@@ -381,7 +391,11 @@ pub fn start() {
         sizes: [(0.0, 0.0); NSUP],
         zoom: 1.0,
         pan: (0.0, 0.0),
-        locked: false,
+        free: Vec::new(),
+        float_free: false,
+        win_free: false,
+        float_pick: false,
+        win_pick: false,
         chained: true,
         dirty: false,
         drag: None,
@@ -404,6 +418,7 @@ pub fn start() {
         wire_sel: None,
         wiring: None,
         note: String::new(),
+        note_at: 0.0,
         t: Tools::default(),
         t2: Tools2::default(),
         quvi: Quvi::default(),
@@ -535,7 +550,11 @@ pub fn on_timer(token: u32) {
                 host::timer(if s.pi_shown < 12 { 160 } else { 90 }, T_PI);
             }
         }
-        T_NOTE => s.note.clear(),
+        T_NOTE => {
+            if host::now() - s.note_at >= 2500.0 {
+                s.note.clear();
+            }
+        }
         T_NF => frenzy_tick(),
         T_JOBS => jobs_tick(),
         T_HAL => {
@@ -1618,18 +1637,21 @@ fn window_frame(s: &State, content: N) -> N {
     let size = s.win_size.map(|(w, h)| format!("width:{:.0}px;height:{:.0}px", w, h)).unwrap_or_default();
     el("section")
         .cls("win")
+        .cls_if(s.win_pick, "picked")
         .attr_if(!size.is_empty(), "style", size)
         .attr("aria-label", super_name(s, s.page, arg))
         .kid(
             el("div")
                 .cls("win-head")
+                .attr("title", if s.win_free { "Unlocked: drag its edges to resize it" } else { "Click here, then the lock, to unlock the window's size" })
                 .on("pdown", Msg::TV(Tool::Grid, 62))
+                .on("click", Msg::TV(Tool::Grid, 65))
                 .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg))),
         )
         .kid(el("div").cls("win-body").kid(el("div").cls("win-in").kid(content)))
-        .kid(el("div").cls("win-grip c").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 60)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())))
-        .kid(el("div").cls("win-grip r").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 63)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())))
-        .kid(el("div").cls("win-grip b").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 64)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())))
+        .kid_if(s.win_free, || el("div").cls("win-grip c").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 60)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
+        .kid_if(s.win_free, || el("div").cls("win-grip r").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 63)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
+        .kid_if(s.win_free, || el("div").cls("win-grip b").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 64)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid(ports())
         .into()
 }

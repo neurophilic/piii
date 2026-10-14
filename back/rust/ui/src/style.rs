@@ -223,6 +223,7 @@ overflow:hidden;text-overflow:ellipsis}
 .focus.peek .win{left:calc(88px + (100vw - 100px) * .15);right:calc((100vw - 100px) * .15 + 12px);top:15vh;bottom:15vh;box-shadow:0 30px 80px -30px rgba(20,20,30,.45)}
 .focus.peek .scene{z-index:0}
 .win-grip{position:absolute;z-index:3;touch-action:none}.win-grip.r{top:60px;right:0;bottom:22px;width:8px;cursor:ew-resize}.win-grip.b{left:22px;right:22px;bottom:0;height:8px;cursor:ns-resize}.win-grip.c{right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--line2) 50%,var(--line2) 56%,transparent 56%,transparent 70%,var(--line2) 70%,var(--line2) 76%,transparent 76%)}
+.win.picked{outline:3px solid var(--accent);outline-offset:2px}
 .win{min-width:360px;min-height:240px;position:fixed;z-index:8;left:88px;top:12px;right:12px;bottom:12px;display:flex;flex-direction:column;background:var(--card);
 border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 18px 50px -30px rgba(20,20,30,.35)}
 .win-head{flex:none;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 22px;border-bottom:1px solid var(--line)}
@@ -364,6 +365,10 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+.sx.icon{display:grid!important;place-items:center;padding:0!important;background:#fff;overflow:hidden}
+.icon-g{display:grid;place-items:center;width:100%;height:100%;font:600 30px/1 'Geist',system-ui,sans-serif;color:var(--ink);letter-spacing:.02em}
+.icon-g svg{width:min(56%,64px);height:auto;max-height:70%}
+.bnode.icon{display:grid;place-items:center}.bnode.icon .icon-g{font-size:22px}
 .sx.picked,.bnode.picked{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 7px var(--accent-soft)}
 /* wiring: the pointer says what a click will do (owner, 2026-10-14: "improve the wiring experience with pointer change") */
 .ports-svg .port.out{cursor:crosshair}
@@ -381,7 +386,7 @@ max-width:min(520px,calc(100% - 32px))}
 .scene.floating{position:fixed;inset:auto;right:18px;bottom:18px;z-index:30;background:var(--paper);overflow:hidden;
 box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
 .scene.floating .frame{border-width:2px}
-.scene.floating{cursor:grab;touch-action:none}.scene.floating.moving{cursor:grabbing}.scene.floating .stage{pointer-events:none}.scene.floating .pi-tab{pointer-events:auto}.scene.floating .sx{cursor:default;box-shadow:none}
+.scene.floating{cursor:grab;touch-action:none}.scene.floating.moving{cursor:grabbing}.scene.floating.locked{cursor:default}.scene.floating.picked{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 7px var(--accent-soft)}.scene.floating .stage{pointer-events:none}.scene.floating .pi-tab{pointer-events:auto}.scene.floating .sx{cursor:default;box-shadow:none}
 
 .scene.floating .sx.lit{outline:6px solid var(--accent);outline-offset:4px;border-color:var(--accent)}
 .pi-tab{position:absolute;left:8px;bottom:8px;z-index:4;width:26px;height:26px;display:grid;place-items:center;background:var(--ink);

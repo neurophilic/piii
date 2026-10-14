@@ -181,13 +181,12 @@ type WireT = (usize, usize, Tip);
 type PassT = (usize, Tip, usize, Tip);
 
 /// The start (pitechlab.sasm, `diagram`), in the language's terms.
-const START_WIRES: [WireT; 6] = [
+const START_WIRES: [WireT; 5] = [
     (PAGE_IN, S_SITE, Tip::In),
     (S_TOOLS, S_EXPLORE, Tip::In),
     (S_EXPLORE, S_LIBRARY, Tip::In),
     (S_LAB, S_PROJECT, Tip::In),
     (S_SAVE, S_TOOLS, Tip::Control),
-    (S_LOCK, S_SITE, Tip::Control),
 ];
 const START_PASSES: [PassT; 4] = [
     (S_SITE, Tip::Control, S_CONNECT, Tip::Control),
@@ -329,7 +328,7 @@ fn arriving(s: &State, id: usize, tip: Tip, depth: u32) -> Vec<usize> {
 
 fn wires_save() {
     let s = st();
-    let mut out = String::from("v2;");
+    let mut out = String::from("v3;");
     for (a, b, t) in &s.wires {
         out.push_str(&format!("w{}-{}-{};", a, b, t.code()));
     }
@@ -345,9 +344,12 @@ fn wires_load() {
     s.passes = START_PASSES.to_vec();
     let Some(v) = host::store_get("piii:wires2") else { return };
     let mut it = v.split(';');
-    if it.next() != Some("v2") {
+    let version = it.next();
+    if version != Some("v2") && version != Some("v3") {
         return;
     }
+    // v2 was saved when the start wired the lock into the site, which left it free; every canvas now starts locked
+    let old_start_lock = version == Some("v2");
     let ok = |id: usize| (id < NSUP && !is_gone(id)) || id == PAGE_IN || id == PAGE_OUT || s.prog.nodes.iter().any(|n| n.id == id);
     let (mut ws, mut ps): (Vec<WireT>, Vec<PassT>) = (Vec::new(), Vec::new());
     for e in it.filter(|e| !e.is_empty()) {
@@ -355,6 +357,9 @@ fn wires_load() {
         match (e.as_bytes()[0], n.as_slice()) {
             (b'w', [a, b, t]) if ok(*a) && ok(*b) => {
                 if let Some(t) = Tip::of(*t as u8) {
+                    if old_start_lock && *a == S_LOCK && *b == S_SITE && t == Tip::Control {
+                        continue;
+                    }
                     ws.push((*a, *b, t));
                 }
             }
@@ -375,14 +380,127 @@ fn ctl_wired(s: &State, ctl: usize) -> bool {
     s.wires.iter().any(|w| w.0 == ctl)
 }
 
-/// Every super stays where it is unless a wire from the lock reaches it (owner, 2026-10-14: "every canvas is locked
-/// in place unless it is connected to lock icon"). A click on the lock frees them all until it is clicked again
-/// (`s.locked` holds that: true = all free). A program's own nodes are its editing, so they always move.
+/// Every canvas starts locked, the program's nodes too: it stays where it is and keeps its size (owner, 2026-10-14:
+/// "all canvases are locked by default"; "locking makes canvas at place and can't be draggable or resizable"). One is
+/// unlocked by selecting it and clicking the lock, and locked again the same way (`s.free` holds the unlocked ones).
 fn locked(s: &State, id: usize) -> bool {
-    if is_unode(id) {
+    !s.free.contains(&id) && !is_icon(s, id)
+}
+
+/// A super under this share of the window's area, as drawn now, is an icon; at or over it, a canvas (owner,
+/// 2026-10-14: "if a super is less than 10% of the screen size, then it's icon. If it's more than 10%, it's a canvas").
+/// An icon is drawn as one and is never locked; it changes as the canvas zooms or the super is resized.
+const ICON_SHARE: f64 = 0.10;
+
+fn icon_area(w_px: f64, h_px: f64) -> bool {
+    w_px * h_px < ICON_SHARE * host::vw() * host::vh()
+}
+
+/// Supers that take the icon look when small: not the controls (already icons), the title, the holder's frame, or
+/// a program's nodes (their text is what they are).
+fn icon_kind(id: usize) -> bool {
+    id >= S_WELCOME && id < NSUP && id != S_HOLD && !is_ctl_super(id) && !matches!(id, S_RUN | S_STEP | S_CLEAR)
+}
+
+/// Is this super (or program node) an icon on the main canvas as it is drawn now?
+fn is_icon(s: &State, id: usize) -> bool {
+    if id == S_HOLD || is_ctl_super(id) {
         return false;
     }
-    !(s.locked || arriving(s, id, Tip::Control, 0).contains(&S_LOCK))
+    let g = geo(s);
+    let (_, _, w, h) = rect(&g, id);
+    w > 0.0 && icon_area(w * g.k, h * g.k)
+}
+
+/// The icon a small super is drawn as: its line drawing when it has one, else its name's initials.
+fn icon_view(id: usize) -> N {
+    let name = sup_label(id);
+    let mark = match group_of(id) {
+        Some(gi) => mark_of(Page::Group(gi as u8), name),
+        None => txt(glyph(name)),
+    };
+    el("span").cls("icon-g").kid(mark).into()
+}
+
+/// What the lock acts on: the selected canvas, newest kind first. Some((is it unlocked now)), or None.
+fn lock_target_free(s: &State) -> Option<bool> {
+    if let Page::Group(g) = s.page {
+        if let Some(b) = s.boards.get(g as usize) {
+            if let Some(n) = b.picked {
+                return Some(b.free.contains(&n));
+            }
+        }
+    }
+    if s.float_pick {
+        return Some(s.float_free);
+    }
+    if s.win_pick {
+        return Some(s.win_free);
+    }
+    if let Some(id) = s.sup_pick {
+        return Some(!locked(s, id));
+    }
+    if let Some(id) = s.prog.sel {
+        return Some(!locked(s, id));
+    }
+    None
+}
+
+/// The lock: the selected canvas is unlocked, or locked again. With nothing selected it says how.
+fn lock_toggle() {
+    let s = st();
+    // keep the selection that the click on the lock would otherwise let go
+    s.last_tap = (usize::MAX, None, host::now());
+    let flip = |v: &mut Vec<usize>, id: usize| -> bool {
+        if let Some(i) = v.iter().position(|x| *x == id) {
+            v.remove(i);
+            false
+        } else {
+            v.push(id);
+            true
+        }
+    };
+    if let Page::Group(g) = s.page {
+        let gi = g as usize;
+        if let Some(n) = board(gi).picked {
+            let b = board(gi);
+            let (_, _, w, h) = bnode(b, n);
+            if icon_area(w, h) {
+                note("An icon is never locked; at 10% of the window or more it is a canvas, and the lock holds it".to_string());
+                return;
+            }
+            let open = flip(&mut b.free, n);
+            board_save(gi);
+            note(if open { "Unlocked: drag it to move it, the middle button resizes it" } else { "Locked in place" }.to_string());
+            return;
+        }
+    }
+    if s.float_pick {
+        s.float_free = !s.float_free;
+        host::store_set("piii:float-free", if s.float_free { "1" } else { "0" });
+        note(if s.float_free { "The canvas is unlocked: drag it to move it, click it to change its size" } else { "The canvas is locked in place" }.to_string());
+        return;
+    }
+    if s.win_pick {
+        s.win_free = !s.win_free;
+        host::store_set("piii:win-free", if s.win_free { "1" } else { "0" });
+        note(if s.win_free { "The window is unlocked: drag its edges to resize it" } else { "The window is locked at its size" }.to_string());
+        return;
+    }
+    let id = match (s.sup_pick, s.prog.sel) {
+        (Some(id), _) | (None, Some(id)) => id,
+        _ => {
+            note("Select a canvas first, then click the lock to unlock it".to_string());
+            return;
+        }
+    };
+    if is_icon(s, id) {
+        note(format!("{} is an icon, and icons are never locked; at 10% of the window or more it is a canvas, and the lock holds it", name_of(id)));
+        return;
+    }
+    let open = flip(&mut s.free, id);
+    layout_save();
+    note(if open { format!("Unlocked: {} can be moved and resized", name_of(id)) } else { format!("Locked in place: {}", name_of(id)) });
 }
 
 fn chain_on(s: &State, id: usize) -> bool {
@@ -701,7 +819,7 @@ fn control_icon(id: usize, s: &State) -> N {
     match id {
         S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if ctl_wired(s, S_SAVE) { "ci accent" } else { "ci" }),
         S_LOCK => {
-            if !s.locked {
+            if !lock_target_free(s).unwrap_or(false) {
                 // on (every super held in place): gray (owner, 2026-10-14: "when the lock icon is on, it changes color
                 // to gray")
                 el("svg:svg")
@@ -745,7 +863,7 @@ fn sup_label(id: usize) -> &'static str {
         S_STEP => "One step",
         S_CLEAR => "Clear the values",
         S_SAVE => "Save the layout",
-        S_LOCK => "Lock: every super stays where it is; wire this into one to let it move, or click to free them all",
+        S_LOCK => "Lock: every canvas stays where it is, at its size; select one, then click here to unlock it (or lock it again)",
         S_CHAIN => "Chain: a holder brings what it holds",
         S_RESET => "Reset: this canvas back to the start",
         S_LEFT => "Move left",
@@ -922,7 +1040,7 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls("sx")
             .cls_if(mini && id == lit(s), "lit")
             .cls_if(!mini && s.wiring.as_ref().and_then(|w| w.to).map(|(t, _)| t == id).unwrap_or(false), "wire-target")
-            .cls_if(!mini && locked(s, id) && id >= S_WELCOME, "locked")
+            .cls_if(!mini && id >= S_WELCOME && !s.free.contains(&id) && !(icon_kind(id) && icon_area(w * g.k, h * g.k)), "locked")
             .cls_if(!mini && s.sup_pick == Some(id), "picked")
             .attr("data-s", format!("{}", id))
             .attr_if(id != S_PROG && id != S_HOLD, "data-solid", "1")
@@ -936,7 +1054,9 @@ fn scene_view(s: &State, mini: bool) -> N {
         if !label.is_empty() && id != S_HOLD && !mini {
             sx = sx.attr("tabindex", "0").attr("role", "button").attr("aria-label", label).on("enter", Msg::Activate(id as u8));
         }
+        let icon = icon_kind(id) && icon_area(w * g.k, h * g.k);
         sx = match id {
+            _ if icon => sx.cls("icon").attr("title", label).kid(icon_view(id)),
             S_TITLE => sx.cls("title").text("piii lab"),
             S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT | S_RUN | S_STEP | S_CLEAR => sx.cls("ctl").attr("title", label).kid(control_icon(id, s)).kid(ports()),
             S_PROG => sx.cls("prog").kids(prog_region_view(s)),
@@ -975,11 +1095,16 @@ fn scene_view(s: &State, mini: bool) -> N {
             Some((l, t)) => format!("left:{:.0}px;top:{:.0}px;right:auto;bottom:auto;", l, t),
             None => String::new(),
         };
+        // locked by default like every canvas: it moves and changes size only while the lock is off (owner, 2026-10-14:
+        // "the second main canvas is locked by default and can't be resized or dragged unless the lock button is off")
+        let free = s.float_free;
         return el("aside")
             .cls("scene floating")
+            .cls_if(!free, "locked")
+            .cls_if(s.float_pick, "picked")
             .cls_if(s.float_drag.as_ref().map(|d| d.moved).unwrap_or(false), "moving")
-            .attr("aria-label", "The canvas: drag it anywhere")
-            .attr("title", "Drag to move")
+            .attr("aria-label", if free { "The canvas: drag it anywhere, click to change its size" } else { "The canvas, locked in place" })
+            .attr("title", if free { "Drag to move, click to change its size" } else { "Locked: click it, then the lock, to unlock it" })
             .style(format!("{}width:{:.0}px;height:{:.0}px", at, w, h))
             .on("pdown", Msg::FloatDown(String::new()))
             .kid(el("div").cls("frame"))
@@ -1185,7 +1310,7 @@ fn port_click(id: usize, tip: Tip) {
                         }
                         format!("Back where it started: {}", name_of(id))
                     }
-                    S_LOCK => format!("Unlocked: {} can be moved while this wire is there", name_of(id)),
+                    S_LOCK => format!("{} stays locked until it is selected and the lock is clicked", name_of(id)),
                     S_CHAIN => format!("Chained: {} brings what it holds", name_of(id)),
                     S_SAVE => {
                         layout_save();
@@ -1243,9 +1368,11 @@ pub struct Drag {
     start: Vec<(usize, (f64, f64))>,
     pan0: (f64, f64),
     /// how it was pressed (owner, 2026-10-14: "Shift plus click drags or middle mouse resizes supers"):
-    /// 0 a click, 1 shift + click (moves it, locked or not), 2 the middle button (resizes it)
+    /// 0 a click, 1 shift + click, 2 the middle button (resizes it); either moves or resizes only once the lock frees it
     how: u8,
     size0: (f64, f64),
+    /// unlocked (or an icon) when it was pressed: a resize that grows an icon into a canvas carries on to the end
+    free: bool,
 }
 
 /// Where a super has been moved to (its offset), or where a program node is in its super.
@@ -1287,7 +1414,8 @@ fn begin_drag(id: usize, at: &str) {
         s.prog.sel = Some(id);
     }
     let start = ids.iter().map(|i| (*i, pos_of(s, *i))).collect();
-    s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan, how, size0: if id < NSUP { s.sizes[id] } else { (0.0, 0.0) } });
+    let free = !locked(s, id);
+    s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan, how, size0: if id < NSUP { s.sizes[id] } else { (0.0, 0.0) }, free });
     host::capture(true);
 }
 
@@ -1354,6 +1482,7 @@ fn wiring_move(x: f64, y: f64) {
 fn note(text: String) {
     let s = st();
     s.note = text;
+    s.note_at = host::now();
     host::timer(2600, T_NOTE);
 }
 
@@ -1376,8 +1505,10 @@ pub fn on_key(key: &str) -> bool {
         return true;
     }
     match key {
-        "Escape" if s.sup_pick.is_some() && s.modal.is_none() && s.held_port.is_none() => {
+        "Escape" if (s.sup_pick.is_some() || s.float_pick || s.win_pick) && s.modal.is_none() && s.held_port.is_none() => {
             s.sup_pick = None;
+            s.float_pick = false;
+            s.win_pick = false;
         }
         "Escape" => {
             if s.modal.is_some() {
@@ -1457,7 +1588,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 4.0 {
                     d.moved = true;
                 }
-                if d.moved {
+                if d.moved && s.float_free {
                     let p = (d.l0 + x - d.sx, d.t0 + y - d.sy);
                     s.float_at = Some(float_clamp(p));
                 }
@@ -1467,7 +1598,16 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 let moved = s.float_drag.as_ref().map(|d| d.moved).unwrap_or(true);
                 s.float_drag = None;
                 if !moved && phase == 1 {
-                    // a click, not a drag: the canvas grows, or goes back to its small size
+                    // a click selects it, for the lock
+                    s.float_pick = true;
+                    s.win_pick = false;
+                    s.sup_pick = None;
+                    if let Page::Group(g) = s.page {
+                        board(g as usize).picked = None;
+                    }
+                }
+                if !moved && phase == 1 && s.float_free {
+                    // unlocked, a click also grows it, or takes it back to its small size
                     s.float_big = !s.float_big;
                     host::store_set("piii:float-big", if s.float_big { "1" } else { "0" });
                     if let Some(p) = s.float_at {
@@ -1506,9 +1646,11 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         render();
         return;
     }
-    let movable = s.drag.as_ref().map(|d| d.how != 2 && (d.how == 1 || !locked(s, d.id)) && d.id >= S_WELCOME).unwrap_or(false);
+    // locking keeps a super in place: no drag while it is locked, shift or not (owner, 2026-10-14: "locking makes canvas at
+    // place and can't be draggable or resizable")
+    let movable = s.drag.as_ref().map(|d| d.how != 2 && d.free && d.id >= S_WELCOME).unwrap_or(false);
     // resizing too waits for the lock: a super is resized only once the lock has freed it (owner, 2026-10-14)
-    let resizable = s.drag.as_ref().map(|d| d.how == 2 && d.id >= S_WELCOME && d.id < NSUP && !is_ctl_super(d.id) && !locked(s, d.id)).unwrap_or(false);
+    let resizable = s.drag.as_ref().map(|d| d.how == 2 && d.id >= S_WELCOME && d.id < NSUP && !is_ctl_super(d.id) && d.free).unwrap_or(false);
     let Some(d) = s.drag.as_mut() else {
         host::capture(false);
         return;
@@ -1565,6 +1707,8 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 } else {
                     s.last_tap = (d.id, d.member, now);
                     s.sup_pick = Some(d.id);
+                    s.float_pick = false;
+                    s.win_pick = false;
                 }
             } else if is_unode(d.id) {
                 prog_save();
@@ -1627,7 +1771,8 @@ fn layout_save() {
     for (x, y) in s.offs.iter() {
         out.push_str(&format!("{:.1},{:.1};", x, y));
     }
-    out.push_str(&format!("|{:.1},{:.1}|{}|{}|", s.pan.0, s.pan.1, s.locked as u8, s.chained as u8));
+    let free: Vec<String> = s.free.iter().map(|i| i.to_string()).collect();
+    out.push_str(&format!("|{:.1},{:.1}|f{}|{}|", s.pan.0, s.pan.1, free.join(","), s.chained as u8));
     for (w, h) in s.sizes.iter() {
         out.push_str(&format!("{:.1},{:.1};", w, h));
     }
@@ -1652,7 +1797,9 @@ fn layout_load() {
         let mut xy = p.split(',');
         s.pan = (xy.next().and_then(|v| v.parse().ok()).unwrap_or(0.0), xy.next().and_then(|v| v.parse().ok()).unwrap_or(0.0));
     }
-    s.locked = parts.get(2) == Some(&"1");
+    s.free = parts.get(2).and_then(|p| p.strip_prefix('f')).map(|p| p.split(',').filter_map(|x| x.parse().ok()).collect()).unwrap_or_default();
+    s.float_free = host::store_get("piii:float-free").as_deref() == Some("1");
+    s.win_free = host::store_get("piii:win-free").as_deref() == Some("1");
     s.chained = parts.get(3) != Some(&"0");
     s.zoom = parts.get(5).and_then(|v| v.parse::<f64>().ok()).filter(|z| z.is_finite() && *z > 0.0).unwrap_or(1.0);
     if let Some(sz) = parts.get(4) {
@@ -1667,10 +1814,7 @@ fn activate(id: usize, member: Option<u8>) {
     let s = st();
     match id {
         S_SAVE => layout_save(),
-        S_LOCK => {
-            s.locked = !s.locked;
-            layout_save();
-        }
+        S_LOCK => lock_toggle(),
         S_CHAIN => {
             s.chained = !s.chained;
             layout_save();
@@ -1687,7 +1831,11 @@ fn activate(id: usize, member: Option<u8>) {
             s.sizes = [(0.0, 0.0); NSUP];
             s.zoom = 1.0;
             s.pan = (0.0, 0.0);
-            s.locked = false;
+            s.free.clear();
+            s.float_free = false;
+            s.win_free = false;
+            host::store_del("piii:float-free");
+            host::store_del("piii:win-free");
             s.chained = true;
             s.open.clear();
             s.wires = START_WIRES.to_vec();

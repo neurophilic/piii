@@ -16,6 +16,8 @@ pub struct Board {
     sel: Option<usize>,
     /// the super a single click selected
     picked: Option<usize>,
+    /// the nodes unlocked by selecting them and clicking the lock; every other one stays put, at its size
+    free: Vec<usize>,
     held: Option<usize>,
     /// where the pointer is while a wire is being made, for the wire that follows it
     at: Option<(f64, f64)>,
@@ -31,6 +33,8 @@ pub struct BoardDrag {
     moved: bool,
     how: u8,
     s0: (f64, f64),
+    /// unlocked (or an icon) when pressed
+    free: bool,
 }
 
 const BW: f64 = 220.0;
@@ -87,6 +91,7 @@ fn board_load(gi: usize, b: &mut Board) {
         let a = e.arr();
         (a.first().map(|x| x.f() as u8).unwrap_or(0), a.get(1).map(|x| x.f()).unwrap_or(0.0), a.get(2).map(|x| x.f()).unwrap_or(0.0), a.get(3).map(|x| x.text()).unwrap_or_default())
     }).collect();
+    b.free = v.get("free").arr().iter().map(|x| x.f() as usize).collect();
     b.sizes = v.get("sizes").arr().iter().map(|p| (p.arr().first().map(|x| x.f()).unwrap_or(0.0), p.arr().get(1).map(|x| x.f()).unwrap_or(0.0))).collect();
     if !v.get("links").is_null() {
         let total = n + b.extra.len();
@@ -104,7 +109,14 @@ fn board_save(gi: usize) {
     let extra: Vec<String> = b.extra.iter().map(|(k, x, y, l)| format!("[{},{:.0},{:.0},{}]", k, x, y, json::quote(l))).collect();
     let links: Vec<String> = b.links.iter().map(|(a, c, t)| format!("[{},{},{}]", a, c, t)).collect();
     let sizes: Vec<String> = b.sizes.iter().map(|(w, h)| format!("[{:.0},{:.0}]", w, h)).collect();
-    host::store_set(&board_key(gi), &format!("{{\"pos\":[{}],\"extra\":[{}],\"links\":[{}],\"sizes\":[{}]}}", pos.join(","), extra.join(","), links.join(","), sizes.join(",")));
+    let free: Vec<String> = b.free.iter().map(|i| i.to_string()).collect();
+    host::store_set(&board_key(gi), &format!("{{\"pos\":[{}],\"extra\":[{}],\"links\":[{}],\"sizes\":[{}],\"free\":[{}]}}", pos.join(","), extra.join(","), links.join(","), sizes.join(","), free.join(",")));
+}
+
+/// Unlocked by the lock, or an icon (under 10% of the window), which is never locked.
+fn bnode_free(b: &Board, i: usize) -> bool {
+    let (_, _, w, h) = bnode(b, i);
+    b.free.contains(&i) || icon_area(w, h)
 }
 
 /// A node's box on the board: a member, a sparkle or a super of your own.
@@ -198,16 +210,17 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 4.0 {
                 d.moved = true;
             }
-            // as on every canvas: a super stays put unless the lock has freed them or shift is held; the middle
-            // button resizes it
-            if d.moved && d.how == 2 && st().locked {
+            // as on every canvas: a super stays put, and keeps its size, until the lock frees them; then a drag moves
+            // it and the middle button resizes it
+            let open = d.free;
+            if d.moved && d.how == 2 && open {
                 let (gx, gy) = (d.s0.0 + x - d.sx, d.s0.1 + y - d.sy);
                 let b = board(gi);
                 while b.sizes.len() <= node {
                     b.sizes.push((0.0, 0.0));
                 }
                 b.sizes[node] = (gx, gy);
-            } else if d.moved && (d.how == 1 || st().locked) {
+            } else if d.moved && open {
                 let d = st().board_drag.as_mut().unwrap();
                 let p = ((d.p0.0 + x - d.sx).max(0.0), (d.p0.1 + y - d.sy).max(0.0));
                 let b = board(gi);
@@ -226,6 +239,11 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             s.board_drag = None;
             if moved {
                 board_save(gi);
+            } else if phase == 1 && how != 2 && node >= board(gi).pos.len() {
+                board(gi).picked = Some(node);
+                let s = st();
+                s.float_pick = false;
+                s.win_pick = false;
             } else if phase == 1 && how != 2 && node < board(gi).pos.len() {
                 // a double click opens the member, as everywhere
                 let now = host::now();
@@ -236,6 +254,8 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
                     board_open(gi, node);
                 } else {
                     s.last_tap = (10_000 + node, None, now);
+                    s.float_pick = false;
+                    s.win_pick = false;
                     board(gi).picked = Some(node);
                 }
             }
@@ -251,7 +271,22 @@ fn board_update(a: u16, v: String) {
         return;
     }
     // the open window: its corner resizes it, and so does the middle button on its head
+    if a == 65 {
+        // a click on the window's head selects it, for the lock
+        let s = st();
+        s.win_pick = true;
+        s.float_pick = false;
+        s.sup_pick = None;
+        if let Page::Group(g) = s.page {
+            board(g as usize).picked = None;
+        }
+        return;
+    }
     if a == 60 || a == 62 || a == 63 || a == 64 {
+        if !st().win_free {
+            // the lock is on: the window keeps its size
+            return;
+        }
         let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
         if a == 62 && n.get(2).copied() != Some(2.0) {
             return;
@@ -284,6 +319,9 @@ fn board_update(a: u16, v: String) {
         return;
     }
     if a == 61 {
+        if !st().win_free {
+            return;
+        }
         st().win_size = None;
         host::store_del("piii:win");
         return;
@@ -314,7 +352,8 @@ fn board_update(a: u16, v: String) {
             let (x, y, _, _) = bnode(b, node);
             let s0 = b.sizes.get(node).copied().unwrap_or((0.0, 0.0));
             let how = nums.get(2).copied().unwrap_or(0.0) as u8;
-            st().board_drag = Some(BoardDrag { gi, node, sx: nums.first().copied().unwrap_or(0.0), sy: nums.get(1).copied().unwrap_or(0.0), p0: (x, y), moved: false, how, s0 });
+            let free = bnode_free(b, node);
+            st().board_drag = Some(BoardDrag { gi, node, sx: nums.first().copied().unwrap_or(0.0), sy: nums.get(1).copied().unwrap_or(0.0), p0: (x, y), moved: false, how, s0, free });
             host::capture(true);
         }
         // a tip: node,tip
@@ -483,8 +522,11 @@ fn group_board(gi: usize) -> N {
                 .style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh))
                 .on("pdown", Msg::TV(Tool::Grid, 1000 + m as u16))
                 .on("enter", Msg::T(Tool::Grid, 8, format!("{}", m)))
-                .kid(el("span").cls("tag").text(*name))
-                .kid_if(!note.is_empty(), || el("span").cls("m-note").text(note).into())
+                .cls_if(icon_area(bw, bh), "icon")
+                .attr_if(icon_area(bw, bh), "title", name.to_string())
+                .kid_if(icon_area(bw, bh), || el("span").cls("icon-g").text(glyph(name)).into())
+                .kid_if(!icon_area(bw, bh), || el("span").cls("tag").text(*name).into())
+                .kid_if(!icon_area(bw, bh) && !note.is_empty(), || el("span").cls("m-note").text(note).into())
                 .into(),
         );
     }
@@ -509,7 +551,7 @@ fn group_board(gi: usize) -> N {
         });
     }
     el("div")
-        .kid(head(g.title, "Everything in this super, on its own canvas. Double click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Supers stay where they are: shift + drag moves one, and once the lock frees them the middle button resizes them."))
+        .kid(head(g.title, "Everything in this super, on its own canvas. Double click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Every super here is locked in place. To move or resize one, click it, then the lock; click the lock again to lock it back."))
         .kid(
             el("div")
                 .cls("board")
