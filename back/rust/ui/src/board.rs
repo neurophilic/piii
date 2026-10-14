@@ -190,8 +190,10 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
     let s = st();
     if let Some((sx, sy, w0, h0, mode)) = s.win_drag {
         if phase == 0 {
-            let w = if mode == 2 { w0 } else { (w0 + x - sx).max(360.0) };
-            let h = if mode == 1 { h0 } else { (h0 + y - sy).max(240.0) };
+            // no larger than the screen beside the rail holds, so every edge stays in view
+            let (mw, mh) = ((host::vw() - 100.0).max(360.0), (host::vh() - 24.0).max(240.0));
+            let w = if mode == 2 { w0.min(mw) } else { (w0 + x - sx).clamp(360.0, mw) };
+            let h = if mode == 1 { h0.min(mh) } else { (h0 + y - sy).clamp(240.0, mh) };
             s.win_size = Some((w, h));
         } else {
             host::capture(false);

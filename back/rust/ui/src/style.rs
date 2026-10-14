@@ -392,5 +392,8 @@ box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
 .pi-tab{position:absolute;left:8px;bottom:8px;z-index:4;width:26px;height:26px;display:grid;place-items:center;background:var(--ink);
 color:var(--paper);font-size:16px;line-height:1}
 .pi-tab:hover{text-decoration:none;background:var(--accent)}
-@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:76px}.win{left:8px;bottom:calc(min(50vw - 12px,30vh) + 88px)}}
+/* a window resized larger than the screen (or kept from a bigger one) still shows its every edge */
+.win{max-width:calc(100vw - 100px);max-height:calc(100vh - 24px)}
+.focus.peek .win{max-width:calc((100vw - 100px) * .85 - 12px);max-height:calc(85vh - 12px)}
+@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:76px}.win{left:8px;bottom:calc(min(50vw - 12px,30vh) + 88px);min-width:0;max-width:calc(100vw - 16px);max-height:calc(100vh - 96px - min(50vw - 12px,30vh))}}
 "#;
