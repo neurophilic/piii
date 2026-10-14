@@ -37,6 +37,9 @@ pub enum Tool {
     Ledger,
     Board,
     Donate,
+    // learn.rs
+    Learn,
+    Whitepaper,
 }
 
 /// What every tool keeps.
@@ -75,6 +78,8 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Ledger => ledger_view(s),
         Tool::Board => board_view(s),
         Tool::Donate => donate_view(s),
+        Tool::Learn => learn_view(s),
+        Tool::Whitepaper => paper_doc_view(),
     }
 }
 
@@ -109,6 +114,9 @@ fn tool_load(t: Tool) {
     if matches!(t, Tool::Ledger | Tool::Board | Tool::Donate) {
         ledger_load(t);
     }
+    if t == Tool::Learn {
+        learn_load();
+    }
     tools2_load(t);
 }
 
@@ -118,6 +126,8 @@ fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
         put(&mut s.t.md, v, err);
     } else if t == Tool::Rev {
         rev_apply(what, v, err);
+    } else if t == Tool::Learn {
+        learn_apply(v, err);
     } else if matches!(t, Tool::Ledger | Tool::Board | Tool::Donate) {
         ledger_apply(t, what, v, err);
     } else if matches!(t, Tool::Bug | Tool::Owner) {
@@ -149,6 +159,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Rev => rev_update(a, v),
         Tool::Bug | Tool::Owner => owner_update(t, a, v),
         Tool::Ledger | Tool::Board | Tool::Donate => ledger_update(t, a, v),
+        Tool::Learn => learn_update(a, v),
         _ => tools2_update(t, a, v),
     }
 }

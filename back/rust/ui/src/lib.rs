@@ -21,6 +21,7 @@ mod mem;
 mod pi;
 mod sha256;
 mod style;
+mod superai;
 mod text;
 
 use alloc::string::String;

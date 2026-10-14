@@ -473,7 +473,7 @@ const GROUPS: [Group; 5] = [
         members: &[
             ("RiBD", Target::Tool(Tool::Buddy)),
             ("The Global Map of Science", Target::Tool(Tool::Map)),
-            ("Whitepaper", Target::Url("/ScholarPi_Whitepaper.pdf")),
+            ("Whitepaper", Target::Tool(Tool::Whitepaper)),
             ("Architecture", Target::Tool(Tool::Arch)),
             ("SciM Assistant", Target::Tool(Tool::Scim)),
             ("Capabilities", Target::Words(
@@ -483,6 +483,7 @@ const GROUPS: [Group; 5] = [
             )),
             ("Neuro Frenzy", Target::Tool(Tool::Frenzy)),
             ("MD", Target::Tool(Tool::Md)),
+            ("Learn to program", Target::Tool(Tool::Learn)),
         ],
     },
     Group {
