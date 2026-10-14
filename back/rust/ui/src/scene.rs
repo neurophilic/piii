@@ -192,7 +192,39 @@ fn is_gone(id: usize) -> bool {
     // everything on the canvas (owner, 2026-10-14: "delete all these things", everything on it): the sidebar reaches
     // every part of the site, and lock, chain and reset stay, under the bar. What you add (a double click: a sparkle,
     // a double right click: a super) still goes on it.
-    !matches!(id, S_LOCK | S_CHAIN | S_RESET)
+    if rail_pin(id).is_some() {
+        // the sidebar's icons are wired from the canvas where the sidebar stands upright (not on a phone)
+        return host::vw() < 700.0;
+    }
+    !matches!(id, S_LOCK | S_CHAIN | S_RESET | S_RUN | S_CLEAR)
+}
+
+/// The controls on the bar, in its order: their supers sit pinned under its buttons.
+const BAR: [usize; 5] = [S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR];
+
+/// The sidebar's icons, top to bottom (π, the five groups, the map; then privacy, cookies and the API), stand on
+/// supers of their own that sit pinned under them, so they are wired like anything else (owner, 2026-10-14).
+const RAIL: [usize; 10] = [S_TITLE, S_TOOLS, S_EXPLORE, S_LIBRARY, S_LAB, S_CONNECT, S_PROJECT, S_PRIVACY, S_WELCOME, S_HOLD];
+
+/// Which sidebar icon a super stands under, if any.
+fn rail_pin(id: usize) -> Option<usize> {
+    RAIL.iter().position(|x| *x == id)
+}
+
+/// Where the sidebar's i-th icon is on screen (its CSS, in numbers): π, a rule, six icons from the top; three at the
+/// foot.
+fn rail_slot(i: usize, vh: f64) -> (f64, f64, f64, f64) {
+    let (x, size, gap) = (20.0, 44.0, 8.0);
+    let y = match i {
+        0 => 22.0,
+        1..=6 => 22.0 + size + gap + 1.0 + gap + (i - 1) as f64 * (size + gap),
+        _ => vh - 22.0 - size - (9 - i) as f64 * (size + gap),
+    };
+    (x, y, size, size)
+}
+
+fn on_bar(id: usize) -> bool {
+    BAR.contains(&id)
 }
 
 fn is_ctl_super(id: usize) -> bool {
@@ -253,50 +285,44 @@ fn loops(s: &State, from: usize, to: usize) -> bool {
 
 /// Can `from`'s out be wired to `to`'s `tip`? Or why not.
 fn can_connect(s: &State, from: usize, to: usize, tip: Tip) -> Result<(), &'static str> {
-    if from == to && !is_reg(s, from) {
-        return Err("a node can not feed itself (a register can: reg feeds its own next value)");
+    // anything joins anything (owner, 2026-10-14): a wire is refused only when it would go nowhere or is already there
+    if !has_tip(from, Tip::Out) || !has_tip(to, tip) {
+        return Err("there is no tip there");
     }
-    if !has_tip(from, Tip::Out) {
-        return Err("the page's right edge has no out");
-    }
-    if tip == Tip::Out {
-        return Err("out is where a wire leaves, not where it arrives");
-    }
-    if !has_tip(to, tip) {
-        return Err(if to == PAGE_OUT { "the page's edge takes only an in" } else { "this super has no inputs" });
-    }
-    if is_ctl_super(from) && tip != Tip::Control {
-        return Err("save, lock, chain and reset go into a control");
+    if from == to && tip == Tip::Out {
+        return Err("a tip does not wire to itself");
     }
     if s.wires.contains(&(from, to, tip)) {
         return Err("already wired");
-    }
-    if loops(s, from, to) {
-        return Err("that would make a loop with no register in it: put a reg in the loop");
     }
     Ok(())
 }
 
 /// Can what arrives at `from`'s `ft` be passed on to `to`'s `tt`? Or why not.
 fn can_relay(s: &State, from: usize, ft: Tip, to: usize, tt: Tip) -> Result<(), &'static str> {
-    for (id, tip) in [(from, ft), (to, tt)] {
-        if !matches!(tip, Tip::Control | Tip::Gate) {
-            return Err("only a control or a gate passes things on");
-        }
-        if !has_tip(id, tip) {
-            return Err("only a super's control and gate pass things on");
-        }
+    // any tip passes on to any tip
+    if !has_tip(from, ft) || !has_tip(to, tt) {
+        return Err("there is no tip there");
     }
-    if from == to {
-        return Err("a super can not pass to itself");
+    if (from, ft) == (to, tt) {
+        return Err("a tip does not wire to itself");
     }
     if s.passes.contains(&(from, ft, to, tt)) {
         return Err("already wired");
     }
-    if loops(s, from, to) {
-        return Err("that would make a loop with no register in it: put a reg in the loop");
-    }
     Ok(())
+}
+
+/// May the wire held at (a, ta) end at (id, tip)? Out to anything but an out is a wire, in from an out a wire drawn
+/// the other way, and any other pair passes on what arrives.
+fn can_join(s: &State, a: usize, ta: Tip, id: usize, tip: Tip) -> bool {
+    if ta == Tip::Out && tip != Tip::Out {
+        can_connect(s, a, id, tip).is_ok()
+    } else if ta == Tip::In && tip == Tip::Out {
+        can_connect(s, id, a, Tip::In).is_ok()
+    } else {
+        can_relay(s, a, ta, id, tip).is_ok()
+    }
 }
 
 /// The nodes whose outs arrive at `id`'s `tip`: wired there, or passed on to it.
@@ -368,7 +394,9 @@ fn ctl_wired(s: &State, ctl: usize) -> bool {
 /// "all canvases are locked by default"; "locking makes canvas at place and can't be draggable or resizable"). One is
 /// unlocked by selecting it and clicking the lock, and locked again the same way (`s.free` holds the unlocked ones).
 fn locked(s: &State, id: usize) -> bool {
-    !s.free.contains(&id) && !is_icon(s, id)
+    // every super, icon or canvas, is locked until it is selected and the lock is clicked (owner, 2026-10-14: "every
+    // super is locked by default")
+    !s.free.contains(&id)
 }
 
 /// A super under this share of the window's area, as drawn now, is an icon; at or over it, a canvas (owner,
@@ -428,7 +456,7 @@ fn shrink_to_icon(id: usize) {
     let (bw, bh) = (b[id].2, b[id].3);
     let (w, h) = icon_size(bw, bh, geo(s).k);
     s.sizes[id] = (w - bw, h - bh);
-    // an icon is never locked; grown into a canvas again, it starts locked
+    // back to an icon, and locked, as every super starts
     s.free.retain(|x| *x != id);
     layout_save();
     note(format!("{} is an icon again", name_of(id)));
@@ -522,11 +550,6 @@ fn lock_toggle() {
         let gi = g as usize;
         if let Some(n) = board(gi).picked {
             let b = board(gi);
-            let (_, _, w, h) = bnode(b, n);
-            if icon_area(w, h) {
-                note("An icon is never locked; at 5% of the window or more it is a canvas, and the lock holds it".to_string());
-                return;
-            }
             let open = flip(&mut b.free, n);
             board_save(gi);
             note(if open { "Unlocked: drag it to move it, the middle button resizes it" } else { "Locked in place" }.to_string());
@@ -553,10 +576,6 @@ fn lock_toggle() {
             return;
         }
     };
-    if is_icon(s, id) {
-        note(format!("{} is an icon, and icons are never locked; at 5% of the window or more it is a canvas, and the lock holds it", name_of(id)));
-        return;
-    }
     let open = flip(&mut s.free, id);
     layout_save();
     note(if open { format!("Unlocked: {} can be moved and resized", name_of(id)) } else { format!("Locked in place: {}", name_of(id)) });
@@ -572,8 +591,13 @@ fn name_of(id: usize) -> String {
         PAGE_IN => "the page's left edge".to_string(),
         PAGE_OUT => "the page's right edge".to_string(),
         S_SITE => "the site".to_string(),
-        S_HOLD => "the holder".to_string(),
+        S_TITLE => "π".to_string(),
+        S_WELCOME => "Cookies".to_string(),
+        S_HOLD => "API".to_string(),
+        S_PROJECT => "Project".to_string(),
         _ if is_unode(id) => match unode(st(), id) {
+            Some(n) if n.text.trim().is_empty() => "a super".to_string(),
+            Some(n) if n.text == SPARKLE => "a sparkle".to_string(),
             Some(n) => format!("“{}”", n.text),
             None => "a node".to_string(),
         },
@@ -734,10 +758,16 @@ fn rect(g: &Geo, id: usize) -> Rect {
 fn geo(s: &State) -> Geo {
     let (w, h) = (host::vw(), host::vh());
     let mut g = geo_zoom(s, w, h, w < 700.0, s.zoom);
-    // lock, chain and reset stay where the bar on top shows them, so their wires meet the bar's buttons
-    for (i, id) in [S_LOCK, S_CHAIN, S_RESET].iter().enumerate() {
+    // the bar's controls and the sidebar's icons stay where they show, so their wires meet them
+    for (i, id) in BAR.iter().enumerate() {
         let (x, y, bw, bh) = bar_slot(i, w, h);
         g.rects[*id] = ((x - g.ox) / g.k, (y - g.oy) / g.k, bw / g.k, bh / g.k);
+    }
+    if w >= 700.0 {
+        for (i, id) in RAIL.iter().enumerate() {
+            let (x, y, bw, bh) = rail_slot(i, h);
+            g.rects[*id] = ((x - g.ox) / g.k, (y - g.oy) / g.k, bw / g.k, bh / g.k);
+        }
     }
     g
 }
@@ -1036,10 +1066,12 @@ fn scene_view(s: &State, mini: bool) -> N {
         let (qx, qy) = tip_point(&g, b, tip);
         let d = match tip {
             Tip::In | Tip::Out => {
-                // the ins of one tip share a bus, halfway from the furthest of them
-                let reach = s.wires.iter().filter(|w| w.1 == b && w.2 == Tip::In).map(|w| leave_point(&g, w.0, Tip::In).0).fold(px, f64::max);
-                let bus = (reach + qx) / 2.0;
-                format!("M{:.1},{:.1} H{:.1} V{:.1} H{:.1}", px, py, bus, qy, qx)
+                // a smooth curve, leaving out to the right and arriving into the in from the left, as node editors draw
+                // them (owner, 2026-10-14: "improve the wiring experience. Like professional")
+                // a wire going back (right to left) loops tight, rather than swinging wide across what is between
+                let min = 40.0 / g.k.max(0.2);
+                let k = if qx >= px { ((qx - px) * 0.5).max(min) } else { ((px - qx) * 0.2).clamp(min * 1.5, min * 3.0).max((qy - py).abs() * 0.25) };
+                format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", px, py, px + k, py, qx - k, qy, qx, qy)
             }
             _ => {
                 // top-to-bottom wires curve (owner, 2026-10-14): leave the way the tip faces, arrive straight down
@@ -1084,14 +1116,26 @@ fn scene_view(s: &State, mini: bool) -> N {
     }
     if let (false, Some((a, ta))) = (mini, s.held_port) {
         let (x1, y1) = if ta == Tip::Out { leave_point(&g, a, Tip::In) } else { tip_point(&g, a, ta) };
-        wires = wires.kid(
-            el("svg:line")
-                .cls("w-temp")
-                .attr("x1", format!("{:.1}", x1))
-                .attr("y1", format!("{:.1}", y1))
-                .attr("x2", format!("{:.1}", s.pend_at.0))
-                .attr("y2", format!("{:.1}", s.pend_at.1)),
-        );
+        // the end jumps to the tip it would join, which lights up: what you see is what letting go makes
+        let snap = nearest_tip(s, s.pend_at.0 * g.k + g.ox, s.pend_at.1 * g.k + g.oy);
+        let (x2, y2) = match snap {
+            Some((id, t)) => if t == Tip::Out { leave_point(&g, id, if is_ctl_super(id) { Tip::Control } else { Tip::In }) } else { tip_point(&g, id, t) },
+            None => s.pend_at,
+        };
+        // an out curves away to the right, an in to the left, a control up and a gate down
+        let away = |t: Tip| -> (f64, f64) {
+            match t {
+                Tip::Out => (1.0, 0.0),
+                Tip::In => (-1.0, 0.0),
+                Tip::Control => (0.0, -1.0),
+                Tip::Gate => (0.0, 1.0),
+            }
+        };
+        let k = (((x2 - x1).abs() + (y2 - y1).abs()) * 0.4).max(30.0 / g.k.max(0.2));
+        let (ax, ay) = away(ta);
+        let (bx, by) = match snap { Some((_, t)) => away(t), None => (-ax, -ay) };
+        let d = format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", x1, y1, x1 + ax * k, y1 + ay * k, x2 + bx * k, y2 + by * k, x2, y2);
+        wires = wires.kid(el("svg:path").cls("w-temp").cls_if(snap.is_some(), "snapped").attr("d", d));
     }
     let ports_svg = ports_view(s, &g, mini);
 
@@ -1111,7 +1155,7 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls_if(!mini && id >= S_WELCOME && !s.free.contains(&id) && !(icon_kind(id) && icon_area(w * g.k, h * g.k)), "locked")
             .cls_if(!mini && s.sup_pick == Some(id), "picked")
             .cls_if(!mini && id == S_RESET && s.reset_hold.is_some(), "holding")
-            .cls_if(!mini && is_ctl_super(id), "under-bar")
+            .cls_if(!mini && (on_bar(id) || rail_pin(id).is_some()), "under-bar")
             .attr("data-s", format!("{}", id))
             .attr_if(id != S_PROG && id != S_HOLD, "data-solid", "1")
             .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
@@ -1185,6 +1229,7 @@ fn scene_view(s: &State, mini: bool) -> N {
     el("div")
         .cls("scene")
         .cls_if(s.wiring.is_some() || s.held_port.is_some(), "wiring")
+        .cls_if(s.pan_drag.is_some(), "panning")
         .attr("title", "Double click: a sparkle. Double right click: a super.")
         .on("click", Msg::WireSel(255))
         .on("dbl", Msg::Dbl(false, String::new()))
@@ -1299,6 +1344,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
     // the connectors: small sparkles (owner, 2026-10-14: "make the center sparkle bigger and connector sparkles smaller")
     let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 8.5 } else { 7.0 / g.k.max(0.6) };
     let mut svg = el("svg:svg").cls("ports-svg").attr("width", "1").attr("height", "1").attr("aria-hidden", if mini { "true" } else { "false" });
+    let snap = if !mini && s.held_port.is_some() { nearest_tip(s, s.pend_at.0 * g.k + g.ox, s.pend_at.1 * g.k + g.oy) } else { None };
     let mut nodes: Vec<usize> = (0..NSUP).filter(|i| *i != S_PALETTE && *i != S_EXAMPLES && !is_gone(*i)).collect();
     nodes.push(PAGE_IN);
     nodes.push(PAGE_OUT);
@@ -1309,8 +1355,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
             let on = s.held_port == Some((id, tip));
             let target = !mini
                 && match s.held_port {
-                    Some((a, Tip::Out)) => tip != Tip::Out && can_connect(s, a, id, tip).is_ok(),
-                    Some((a, ta)) => matches!(tip, Tip::Control | Tip::Gate) && can_relay(s, a, ta, id, tip).is_ok(),
+                    Some((a, ta)) => can_join(s, a, ta, id, tip),
                     None => false,
                 };
             // a tip with nothing on it stays out of sight until the pointer comes near or a wire is being made
@@ -1325,6 +1370,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                 .cls(if tip == Tip::Out { "out" } else { "tip" })
                 .cls_if(on, "on")
                 .cls_if(target, "target")
+                .cls_if(snap == Some((id, tip)), "snap")
                 .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, r)));
             if !mini {
                 gp = gp
@@ -1380,10 +1426,7 @@ fn nearest_tip(s: &State, x: f64, y: f64) -> Option<(usize, Tip)> {
             if (id, tip) == (a, ta) {
                 continue;
             }
-            let ok = match ta {
-                Tip::Out => tip != Tip::Out && can_connect(s, a, id, tip).is_ok(),
-                _ => matches!(tip, Tip::Control | Tip::Gate) && can_relay(s, a, ta, id, tip).is_ok(),
-            };
+            let ok = can_join(s, a, ta, id, tip);
             if !ok {
                 continue;
             }
@@ -1403,7 +1446,6 @@ fn port_click(id: usize, tip: Tip) {
     let s = st();
     let Some((a, ta)) = s.held_port else {
         match tip {
-            Tip::In => note("In is where a wire arrives: click an out first, then this".to_string()),
             _ => {
                 s.wire_sel = None;
                 s.held_port = Some((id, tip));
@@ -1447,7 +1489,17 @@ fn port_click(id: usize, tip: Tip) {
                 note(msg);
             }
         }
-    } else if ta != Tip::Out && matches!(tip, Tip::Control | Tip::Gate) {
+    } else if ta == Tip::In && tip == Tip::Out {
+        // started at an in, ended at an out: the same wire, drawn the other way
+        match can_connect(s, id, a, Tip::In) {
+            Err(e) => note(format!("Not wired: {}", e)),
+            Ok(()) => {
+                s.wires.push((id, a, Tip::In));
+                wires_save();
+                note(format!("Wired {}'s out to {}'s in", name_of(id), name_of(a)));
+            }
+        }
+    } else if !(ta == Tip::Out && tip != Tip::Out) {
         match can_relay(s, a, ta, id, tip) {
             Err(e) => note(format!("Not passed on: {}", e)),
             Ok(()) => {
@@ -1456,13 +1508,6 @@ fn port_click(id: usize, tip: Tip) {
                 note(format!("What arrives at {}'s {} passes on to {}'s {}", name_of(a), ta.name(), name_of(id), tip.name()));
             }
         }
-    } else if tip == Tip::Out {
-        s.held_port = Some((id, tip));
-        let g = geo(s);
-        s.pend_at = tip_point(&g, id, tip);
-        host::capture(true);
-    } else {
-        note("Not wired: a wire leaves from an out and arrives at an in, a control or a gate".to_string());
     }
 }
 
@@ -2111,7 +2156,7 @@ fn open_member(gi: usize, m: usize) {
 fn group_page(gi: usize) -> N {
     let g = &GROUPS[gi];
     el("div")
-        .kid(head(g.title, "Everything in this super. Open one and it takes the canvas; the rest wait as icons."))
+        .kid(el("div").cls("head").kid(el("h1").text(g.title)))
         .kid(el("div").cls("members").kids(g.members.iter().enumerate().map(|(m, (name, t))| -> N {
             let (href, note, ext) = match t {
                 Target::Hash(h) => (h.to_string(), "", false),
@@ -2148,7 +2193,9 @@ fn bar_ports(id: usize) -> N {
             .attr("width", "14")
             .attr("height", "14")
             .attr("data-stop", "1")
+            .attr("data-nonav", "1")
             .on("click", Msg::Port(id, t.code()))
+            .on("pdown", Msg::PortDown(id, t.code(), String::new()))
             .kid(el("svg:title").text(match t {
                 Tip::Out => "out. Click, then click a tip",
                 Tip::In => "in",

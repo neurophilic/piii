@@ -276,6 +276,8 @@ struct State {
     note: String,
     /// the open page's zoom (the canvas has its own)
     pzoom: f64,
+    /// how far the open page has been panned (px); back to 0 when another page opens
+    ppan: (f64, f64),
     /// a pan of the canvas by dragging its bare background: press x, y and the pan then
     pan_drag: Option<(f64, f64, (f64, f64))>,
     /// a wire dragged out of a tip on the canvas: where the press began; and when a tip was last pressed (the click that
@@ -438,6 +440,7 @@ pub fn start() {
         wiring: None,
         note: String::new(),
         pzoom: 1.0,
+        ppan: (0.0, 0.0),
         pan_drag: None,
         port_drag: None,
         port_press: 0.0,
@@ -558,6 +561,12 @@ pub fn on_nav() {
     route();
     load();
     host::scroll_top();
+    render();
+}
+
+pub fn on_page_pan(dx: f64, dy: f64) {
+    let s = st();
+    s.ppan = (s.ppan.0 + dx, s.ppan.1 + dy);
     render();
 }
 
@@ -683,6 +692,7 @@ fn route() {
     // a window over the page belongs to the page it was opened on
     s.modal = None;
     s.peek = core::mem::take(&mut s.peek_next);
+    s.ppan = (0.0, 0.0);
     // the start page is the canvas, with the sidebar and the controls over it (owner, 2026-10-14: "this should be the
     // start page"); before, it was the Tools super, open
     match parts.next().unwrap_or("") {
@@ -1665,23 +1675,37 @@ fn mark_of(page: Page, name: &str) -> N {
 }
 
 fn rail(s: &State) -> N {
+    // on the canvas, an icon's tips are real: they are the tips of the super pinned under it
+    let tips = |pin: Option<usize>| -> N {
+        match pin {
+            Some(id) if s.page == Page::Home && host::vw() >= 700.0 => bar_ports(id),
+            _ => ports(),
+        }
+    };
     let icon = |page: Page, arg: &str| -> N {
         let name = super_name(s, page, arg);
         let open = s.open.iter().any(|(p, a)| *p == page && a == arg);
         el("a")
             .cls("ric")
+            .attr("draggable", "false")
             .cls_if(open, "open")
             .cls_if(is_current(s, page, arg), "on")
             .attr("href", hash_of(page, arg))
             .attr("aria-label", name.clone())
             .kid(el("span").cls("g").kid(mark_of(page, &name)))
             .kid(el("span").cls("tip").text(name))
-            .kid(ports())
+            .kid(tips(match page {
+                Page::Group(g) if (g as usize) < 5 => Some(RAIL[1 + g as usize]),
+                Page::Map => Some(RAIL[6]),
+                _ => None,
+            }))
             .into()
     };
-    let mut r = el("nav").cls("rail").attr("aria-label", "Everything else").kid(
+    // the top part scrolls (with no bar); privacy, cookies and the API stay put at the foot (owner, 2026-10-14)
+    let mut r = el("div").cls("rscroll").kid(
         el("a")
             .cls("ric home")
+            .attr("draggable", "false")
             .attr("href", "#/")
             .attr("aria-label", "Back to the canvas")
             // π drawn as a line icon, like every other one in the sidebar (owner, 2026-10-14: "make the pi icon same as
@@ -1702,13 +1726,40 @@ fn rail(s: &State) -> N {
                     .kid(el("svg:path").attr("d", "M15.5 5c-.4 4.5-.3 9 .6 12.2.4 1.3 1.6 1.8 3.4 1.1")),
             ))
             .kid(el("span").cls("tip").text("piii lab"))
-            .kid(ports()),
+            .kid(tips(Some(RAIL[0]))),
     );
     r = r.kid(el("span").cls("rsep"));
     let tops = [Page::Group(0), Page::Group(1), Page::Group(2), Page::Group(3), Page::Group(4), Page::Map];
     for p in tops {
         r = r.kid(icon(p, ""));
     }
+    // the example program: a click puts "count to 10" on the canvas and goes there (owner, 2026-10-14: "make this an
+    // example and put it in the side icon")
+    r = r.kid(
+        el("button")
+            .attr("type", "button")
+            .cls("ric")
+            .attr("aria-label", "Example: count to 10")
+            .on("click", Msg::T(Tool::Ledger, 52, String::new()))
+            .kid(el("span").cls("g").kid(
+                el("svg:svg")
+                    .attr("viewBox", "0 0 24 24")
+                    .attr("width", "20")
+                    .attr("height", "20")
+                    .attr("fill", "none")
+                    .attr("stroke", "currentColor")
+                    .attr("stroke-width", "1.8")
+                    .attr("stroke-linecap", "round")
+                    .attr("stroke-linejoin", "round")
+                    .attr("aria-hidden", "true")
+                    .kid(el("svg:path").attr("d", "M3 6h5v4H3z"))
+                    .kid(el("svg:path").attr("d", "M3 14h5v4H3z"))
+                    .kid(el("svg:path").attr("d", "M16 10h5v4h-5z"))
+                    .kid(el("svg:path").attr("d", "M8 8c4 0 4 4 8 4M8 16c4 0 4-4 8-4")),
+            ))
+            .kid(el("span").cls("tip").text("Example: count to 10"))
+            .kid(ports()),
+    );
     let extra: Vec<&(Page, String)> = s.open.iter().filter(|(p, _)| !tops.contains(p)).collect();
     if !extra.is_empty() {
         r = r.kid(el("span").cls("rsep"));
@@ -1732,26 +1783,29 @@ fn rail(s: &State) -> N {
             .kids(d.iter().map(|x| -> N { el("svg:path").attr("d", *x).into() }))
             .into()
     };
-    let foot = |e: El<Msg>, name: &str, d: &[&str]| -> N {
-        e.cls("ric").attr("aria-label", name).kid(el("span").cls("g").kid(mark(d))).kid(el("span").cls("tip").text(name)).kid(ports()).into()
+    let foot = |e: El<Msg>, name: &str, d: &[&str], pin: usize| -> N {
+        e.cls("ric").attr("aria-label", name).kid(el("span").cls("g").kid(mark(d))).kid(el("span").cls("tip").text(name)).kid(tips(Some(pin))).into()
     };
-    r = r.kid(el("span").cls("rgrow"));
-    r = r.kid(foot(
+    let mut f = el("div").cls("rfoot");
+    f = f.kid(foot(
         el("button").attr("type", "button").on("click", Msg::ConsentOpen),
         "Privacy choices",
         &["M12 3l8 3v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6z", "M12 10.5v3.5"],
+        RAIL[7],
     ));
-    r = r.kid(foot(
+    f = f.kid(foot(
         el("button").attr("type", "button").on("click", Msg::T(Tool::Ledger, 50, String::new())),
         "Cookies",
         &["M21 12a9 9 0 1 1-9-9 3 3 0 0 0 3 3 3 3 0 0 0 3 3 3 3 0 0 0 3 3z", "M8.5 10.5h.01", "M14 15h.01", "M9 15.5h.01"],
+        RAIL[8],
     ));
-    r = r.kid(foot(
+    f = f.kid(foot(
         el("button").attr("type", "button").on("click", Msg::T(Tool::Ledger, 51, String::new())),
         "API",
         &["M8 7l-5 5 5 5", "M16 7l5 5-5 5"],
+        RAIL[9],
     ));
-    r.into()
+    el("nav").cls("rail").attr("aria-label", "Everything else").kid(r).kid(f).into()
 }
 
 fn window_frame(s: &State, content: N) -> N {
@@ -1775,7 +1829,7 @@ fn window_frame(s: &State, content: N) -> N {
                 .on("click", Msg::TV(Tool::Grid, 65))
                 .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg))),
         )
-        .kid(el("div").cls("win-body").kid(el("div").cls("win-in").attr_if(s.pzoom != 1.0, "style", format!("zoom:{:.4}", s.pzoom)).kid(content)))
+        .kid(el("div").cls("win-body").kid(el("div").cls("win-in").attr_if(s.pzoom != 1.0 || s.ppan != (0.0, 0.0), "style", format!("zoom:{:.4};transform:translate({:.1}px,{:.1}px)", s.pzoom, s.ppan.0 / s.pzoom, s.ppan.1 / s.pzoom)).kid(content)))
         .kid_if(s.win_free, || el("div").cls("win-grip c").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 60)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid_if(s.win_free, || el("div").cls("win-grip r").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 63)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
         .kid_if(s.win_free, || el("div").cls("win-grip b").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 64)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())).into())
@@ -3138,7 +3192,7 @@ fn ctl_bar(s: &State) -> N {
                 .on_if(id != S_RESET, "click", Msg::Activate(id as u8))
                 .kid_if(id == S_RESET, || el("span").cls("hold-face").on("pdown", Msg::TV(Tool::Grid, 66)).into())
                 .kid(control_icon(id, s))
-                .kid(bar_ports(id))
+                .kid(if s.page == Page::Home { bar_ports(id) } else { ports() })
                 .into()
         }))
         .into()

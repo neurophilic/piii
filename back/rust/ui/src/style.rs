@@ -220,7 +220,9 @@ color:var(--paper);font-size:12px;font-weight:500;white-space:nowrap;pointer-eve
 overflow:hidden;text-overflow:ellipsis}
 .ric:hover .tip,.ric:focus-visible .tip{opacity:1}
 .rsep{flex:none;width:26px;height:1px;background:var(--line)}
-.rgrow{flex:1 1 auto;min-width:8px;min-height:8px}button.ric{font:inherit;padding:0;cursor:pointer}
+.rscroll{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;overflow-y:auto;overflow-x:hidden;padding:0 0 6px}
+.rfoot{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:6px}
+@media (max-width:699px){.rscroll{flex-direction:row;overflow-x:auto;overflow-y:hidden;height:100%;width:auto;padding:0 6px 0 0}.rfoot{flex-direction:row;padding:0 0 0 6px}}button.ric{font:inherit;padding:0;cursor:pointer}
 .focus.peek .win{left:calc(88px + (100vw - 100px) * .15);right:calc((100vw - 100px) * .15 + 12px);top:15vh;bottom:15vh;box-shadow:0 30px 80px -30px rgba(20,20,30,.45)}
 .focus.peek .scene{z-index:0}
 .win-grip{position:absolute;z-index:3;touch-action:none}.win-grip.r{top:60px;right:0;bottom:22px;width:8px;cursor:ew-resize}.win-grip.b{left:22px;right:22px;bottom:0;height:8px;cursor:ns-resize}.win-grip.c{right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--line2) 50%,var(--line2) 56%,transparent 56%,transparent 70%,var(--line2) 70%,var(--line2) 76%,transparent 76%)}
@@ -362,10 +364,16 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 /* wiring */
 .wires .w-hit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
 .wires .w.sel{stroke:var(--accent);stroke-width:3.2}
-.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:6 6}
+.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:6 6;stroke-linecap:round}.wires .w-temp.snapped{stroke-dasharray:none;stroke-width:2.8}
+.ports-svg .port.snap .mark{fill:var(--accent);stroke:var(--accent);opacity:1;transform-box:fill-box;transform-origin:center;transform:scale(1.7)}
+.wires .w-hit:hover{stroke:rgba(47,64,232,.22)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+/* panning: an open hand over what can be panned, a closed one while it is (owner, 2026-10-14) */
+.scene,.win-body{cursor:grab}:where(.scene *,.win-body *){cursor:auto}
+.scene.panning,.scene.panning *,html.panning,html.panning *{cursor:grabbing!important}
+.ric{-webkit-user-drag:none;user-select:none}
 /* no scroll bar anywhere, ever; everything still scrolls (owner, 2026-10-14) */
 *{scrollbar-width:none;-ms-overflow-style:none}*::-webkit-scrollbar{display:none;width:0;height:0}
 .wire-note.page-note{position:fixed;left:50%;right:auto;bottom:24px;transform:translateX(-50%);z-index:2147483001;max-width:calc(100vw - 32px)}

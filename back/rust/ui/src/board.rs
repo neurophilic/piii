@@ -19,6 +19,8 @@ pub struct Board {
     /// the nodes unlocked by selecting them and clicking the lock; every other one stays put, at its size
     free: Vec<usize>,
     held: Option<usize>,
+    /// the tip of the held super the wire starts at (any tip: anything wires to anything)
+    held_tip: u8,
     /// where the pointer is while a wire is being made, for the wire that follows it
     at: Option<(f64, f64)>,
     note: String,
@@ -115,8 +117,26 @@ fn board_save(gi: usize) {
 
 /// Unlocked by the lock, or an icon (under 5% of the window), which is never locked.
 fn bnode_free(b: &Board, i: usize) -> bool {
-    let (_, _, w, h) = bnode(b, i);
-    b.free.contains(&i) || icon_area(w, h)
+    b.free.contains(&i)
+}
+
+/// The tip a wire held from `from`, its end at `at`, would join: the nearest in, control or gate within SNAP.
+fn board_snap(b: &Board, from: usize, ftip: u8, at: (f64, f64)) -> Option<(usize, u8)> {
+    let mut best: Option<(f64, usize, u8)> = None;
+    for n in 0..b.pos.len() + b.extra.len() {
+        for t in 0u8..4 {
+            if (n, t) == (from, ftip) {
+                continue;
+            }
+            let (tx, ty) = btip(b, n, t);
+            let (dx, dy) = (tx - at.0, ty - at.1);
+            let d = (dx * dx + dy * dy).sqrt_c();
+            if d <= SNAP && best.map(|q| d < q.0).unwrap_or(true) {
+                best = Some((d, n, t));
+            }
+        }
+    }
+    best.map(|q| (q.1, q.2))
 }
 
 /// A node a double click shrinks: shown as a canvas (5% of the window or more) and unlocked.
@@ -166,6 +186,20 @@ fn btip(b: &Board, i: usize, t: u8) -> (f64, f64) {
         2 => (x + w / 2.0, y),
         _ => (x + w / 2.0, y + h),
     }
+}
+
+/// A wire on a super's canvas stores both its tips in one byte: where it arrives (0 in, 1 out, 2 control, 3 gate) and,
+/// above that, where it leaves, counted from the out, so the wires saved when every wire left an out read the same.
+fn link_byte(from_tip: u8, to_tip: u8) -> u8 {
+    (to_tip & 3) | (((from_tip ^ 1) & 3) << 2)
+}
+
+fn link_to(v: u8) -> u8 {
+    v & 3
+}
+
+fn link_from(v: u8) -> u8 {
+    ((v >> 2) & 3) ^ 1
 }
 
 fn side_of(t: u8) -> Side {
@@ -220,24 +254,9 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             s.bwire = None;
             if (x - x0).abs() + (y - y0).abs() > 6.0 {
                 let b = board(gi);
-                let from = b.held.unwrap_or(usize::MAX);
-                let total = b.pos.len() + b.extra.len();
-                let mut best: Option<(f64, usize, u8)> = None;
-                for n in 0..total {
-                    for t in [0u8, 2, 3] {
-                        if n == from {
-                            continue;
-                        }
-                        let (tx, ty) = btip(b, n, t);
-                        let (dx, dy) = (tx - at.0, ty - at.1);
-                        let d = (dx * dx + dy * dy).sqrt_c();
-                        if d <= SNAP && best.map(|q| d < q.0).unwrap_or(true) {
-                            best = Some((d, n, t));
-                        }
-                    }
-                }
+                let best = match b.held { Some(h) => board_snap(b, h, b.held_tip, at), None => None };
                 match best {
-                    Some((_, n, t)) => board_tip(gi, n, t),
+                    Some((n, t)) => board_tip(gi, n, t),
                     None => {
                         let b = board(gi);
                         b.held = None;
@@ -496,34 +515,29 @@ fn board_update(a: u16, v: String) {
 
 /// A tip of a super on its canvas, clicked or let go on: start a wire at an out, or finish the held one here.
 fn board_tip(gi: usize, node: usize, tip: u8) {
+    // anything wires to anything (owner, 2026-10-14): a wire starts at any tip and ends at any other
     let b = board(gi);
     b.sel = None;
-    match b.held {
-        None if tip == 1 => {
-            b.held = Some(node);
-            b.at = None;
-            b.note = "Now click a tip of another super: in, control or gate.".into();
-        }
-        None => b.note = "A wire starts at an out (the filled tip on the right).".into(),
-        Some(from) => {
-            b.held = None;
-            if tip == 1 {
-                b.held = Some(node);
-            b.at = None;
-            } else if from == node {
-                b.note = "A super does not wire into itself.".into();
-            } else if board_reaches(b, node, from) {
-                b.note = "That would make a loop.".into();
-            } else if b.links.iter().any(|l| l.0 == from && l.1 == node && l.2 == tip) {
-                b.note = "Already wired.".into();
-            } else {
-                b.links.push((from, node, tip));
-                b.note.clear();
-                board_save(gi);
-            }
-        }
+    b.note.clear();
+    let Some(from) = b.held else {
+        b.held = Some(node);
+        b.held_tip = tip;
+        b.at = None;
+        return;
+    };
+    let ft = b.held_tip;
+    b.held = None;
+    if (from, ft) == (node, tip) {
+        return;
     }
-
+    // kept leaving an out where it can, so the program reads it as data flowing on
+    let (a, c, v) = if tip == 1 && ft != 1 { (node, from, link_byte(1, ft)) } else { (from, node, link_byte(ft, tip)) };
+    if b.links.iter().any(|l| *l == (a, c, v)) {
+        b.note = "Already wired.".into();
+        return;
+    }
+    b.links.push((a, c, v));
+    board_save(gi);
 }
 
 fn board_reset(gi: usize) {
@@ -575,28 +589,36 @@ fn group_board(gi: usize) -> N {
     let pien_pick = st().t2.pien.pick.clone();
     // wires
     let mut wires = el("svg:svg").cls("wires").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h)).kid(el("svg:defs").kid(arrowhead("bah-flow", "flow")).kid(arrowhead("bah-ink", "ink")));
-    for (i, (from, to, tip)) in b.links.iter().enumerate() {
-        let a = btip(&b, *from, 1);
-        let z = btip(&b, *to, *tip);
-        let d = curve(a, Side::R, z, side_of(*tip));
-        let kind = match tip { 0 => "flow", 2 => "control", _ => "gate" };
+    for (i, (from, to, v)) in b.links.iter().enumerate() {
+        let (ft, tt) = (link_from(*v), link_to(*v));
+        let a = btip(&b, *from, ft);
+        let z = btip(&b, *to, tt);
+        let d = curve(a, side_of(ft), z, side_of(tt));
+        let kind = match tt { 0 | 1 => "flow", 2 => "control", _ => "gate" };
         wires = wires
             .kid(el("svg:path").cls("w").cls(kind).cls_if(b.sel == Some(i), "sel").attr("d", d.clone()).attr("marker-end", if kind == "flow" { "url(#bah-flow)" } else { "url(#bah-ink)" }))
             .kid(el("svg:path").cls("w-hit").attr("data-stop", "1").attr("data-solid", "1").attr("d", d).on("click", Msg::T(Tool::Grid, 3, format!("{}", i))).kid(el("svg:title").text("A wire: click to select it, then Delete to remove it")));
     }
     // the wire being made follows the pointer
+    let bsnap = match (b.held, b.at) { (Some(h), Some(at)) => board_snap(&b, h, b.held_tip, at), _ => None };
     if let (Some(h), Some(at)) = (b.held, b.at) {
-        let a = btip(&b, h, 1);
-        wires = wires.kid(el("svg:path").cls("w-temp").attr("d", curve(a, Side::R, at, Side::L)));
+        let a = btip(&b, h, b.held_tip);
+        let back = match side_of(b.held_tip) { Side::R => Side::L, Side::L => Side::R, Side::T => Side::B, Side::B => Side::T };
+        let d = match bsnap {
+            Some((n, t)) => curve(a, side_of(b.held_tip), btip(&b, n, t), side_of(t)),
+            None => curve(a, side_of(b.held_tip), at, back),
+        };
+        wires = wires.kid(el("svg:path").cls("w-temp").cls_if(bsnap.is_some(), "snapped").attr("d", d));
     }
     // tips
     let mut tips = el("svg:svg").cls("ports-svg board-ports").cls_if(b.held.is_some(), "holding").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h));
     for i in 0..total {
         for t in 0..4u8 {
             let (x, y) = btip(&b, i, t);
-            let held = b.held == Some(i) && t == 1;
-            let target = b.held.is_some() && b.held != Some(i) && t != 1;
-            let wired = b.links.iter().any(|l| (l.0 == i && t == 1) || (l.1 == i && l.2 == t));
+            let held = b.held == Some(i) && t == b.held_tip;
+            let target = b.held.is_some() && !held;
+            let snapped = bsnap == Some((i, t));
+            let wired = b.links.iter().any(|l| (l.0 == i && link_from(l.2) == t) || (l.1 == i && link_to(l.2) == t));
             tips = tips.kid(
                 el("svg:g")
                     .cls("port")
@@ -604,6 +626,7 @@ fn group_board(gi: usize) -> N {
                     .cls_if(held, "on")
                     .cls_if(wired, "wired")
                     .cls_if(target, "target")
+                    .cls_if(snapped, "snap")
                     .attr("data-stop", "1")
                     .attr("data-solid", "1")
                     .on("click", Msg::T(Tool::Grid, 2, format!("{},{}", i, t)))
@@ -665,14 +688,15 @@ fn group_board(gi: usize) -> N {
         });
     }
     el("div")
-        .kid(head(g.title, "Everything in this super, on its own canvas. Double click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Every super here is locked in place. To move or resize one, click it, then the lock; click the lock again to lock it back."))
+        // no description under the title (owner, 2026-10-14: "delete this description everywhere")
+        .kid(el("div").cls("head").kid(el("h1").text(g.title)))
         .kid(
             el("div")
                 .cls("board")
                 .cls_if(b.held.is_some(), "holding")
                 .on_if(b.held.is_some(), "mmove", Msg::TV(Tool::Grid, 71))
                 // the whole window below the heading is the canvas: a double click anywhere in it makes a sparkle
-                .style(format!("height:{:.0}px;min-height:calc(100vh - 290px);min-width:{:.0}px", h, w))
+                .style(format!("height:{:.0}px;min-height:calc(100vh - 190px);min-width:{:.0}px", h, w))
                 .on("dbl", Msg::TV(Tool::Grid, 4))
                 .on("dbl2", Msg::TV(Tool::Grid, 5))
                 .on("click", Msg::T(Tool::Grid, 3, "-1".into()))
