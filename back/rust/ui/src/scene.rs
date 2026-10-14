@@ -342,6 +342,7 @@ fn arriving(s: &State, id: usize, tip: Tip, depth: u32) -> Vec<usize> {
 }
 
 fn wires_save() {
+    undo_mark();
     let s = st();
     let mut out = String::from("v3;");
     for (a, b, t) in &s.wires {
@@ -797,8 +798,8 @@ fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
     let gap = if narrow { 10.0 } else { 12.0 };
     let top = if narrow { vh - 80.0 - bh } else { 10.0 };
     // five buttons: lock, chain, reset, play, stop
-    // six buttons: lock, chain, reset, play, stop, and the + for wiring
-    let left = vw / 2.0 - (6.0 * bw + 5.0 * gap) / 2.0 + i as f64 * (bw + gap);
+    // seven buttons: lock, chain, reset, play, stop, the + for wiring and undo
+    let left = vw / 2.0 - (7.0 * bw + 6.0 * gap) / 2.0 + i as f64 * (bw + gap);
     (left, top, bw, bh)
 }
 
@@ -1221,8 +1222,11 @@ fn scene_view(s: &State, mini: bool) -> N {
         }
         stage = stage.kid(sx);
     }
-    // the program's nodes, over its super
-    for n in &s.prog.nodes {
+    // the program's nodes, over its super: the bigger first, so what is drawn inside a canvas super lies on it
+    let mut order: Vec<&UNode> = s.prog.nodes.iter().collect();
+    let area = |n: &UNode| { let r = rect(&g, n.id); r.2 * r.3 };
+    order.sort_by(|a, b| area(b).partial_cmp(&area(a)).unwrap_or(core::cmp::Ordering::Equal));
+    for n in order {
         stage = stage.kid(unode_view(s, n, rect(&g, n.id), mini));
     }
     stage = stage.kid(ports_svg);
@@ -1251,6 +1255,8 @@ fn scene_view(s: &State, mini: bool) -> N {
     }
     el("div")
         .cls("scene")
+        // the main canvas is selected whenever nothing on it is: its frame is blue then
+        .cls_if(s.sup_pick.is_none() && s.prog.sel.is_none(), "picked")
         .cls_if(s.wiring.is_some() || s.held_port.is_some(), "wiring")
         .cls_if(s.pan_drag.is_some(), "panning")
         .attr("title", "Double click: a sparkle. Double right click: a super.")
@@ -1673,6 +1679,11 @@ fn begin_drag(id: usize, at: &str) {
     }
     if is_unode(id) {
         s.prog.sel = Some(id);
+        // a canvas super carries what is drawn inside it
+        if how == 0 {
+            let inside = unode_inside(s, id);
+            ids.extend(inside);
+        }
     }
     let start = ids.iter().map(|i| (*i, pos_of(s, *i))).collect();
     let free = !locked(s, id);
@@ -1780,6 +1791,10 @@ pub fn on_key(key: &str) -> bool {
     }
     let s = st();
     if s.modal.is_none() && board_key_press(key) {
+        return true;
+    }
+    if key == "Undo" {
+        undo();
         return true;
     }
     match key {
@@ -2020,6 +2035,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         1 => {
             host::capture(false);
             let d = s.drag.take().unwrap();
+            s.drag_end_at = host::now();
             if d.how != 0 && d.moved {
                 if is_unode(d.id) {
                     prog_save();
@@ -2029,7 +2045,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             } else if !d.moved && d.id == S_RESET {
                 // reset is held, not clicked: let go early and nothing happens
                 reset_hold_end(true);
-            } else if !d.moved && is_unode(d.id) && d.free && s.last_tap.0 == d.id && host::now() - s.last_tap.2 < 450.0 {
+            } else if !d.moved && is_unode(d.id) && d.free && s.last_tap.0 == d.id && host::now() - s.last_tap.2 < 450.0 && !unode(s, d.id).map(unode_is_canvas).unwrap_or(false) {
                 // a super or sparkle of yours, unlocked and double clicked: gone, with its wires (owner, 2026-10-14)
                 s.last_tap = (usize::MAX, None, 0.0);
                 s.free.retain(|i| *i != d.id);
@@ -2140,7 +2156,96 @@ pub fn on_resize() {
     render();
 }
 
+/// What undo keeps of the canvas: its supers and sparkles, their sizes, the wires, and the layout (its view, pan and
+/// zoom, left out: moving the view is not a change to undo).
+const UNDO_KEYS: [&str; 4] = ["piii:program", "piii:program-sizes", "piii:wires2", "piii:layout2"];
+
+/// The layout's parts undo leaves as they are now: the view (pan, zoom), the locks and the chain.
+fn keeps_now(i: usize) -> bool {
+    matches!(i, 1 | 2 | 3 | 5)
+}
+
+fn layout_no_view(v: &str) -> String {
+    v.split('|').enumerate().map(|(i, p)| if keeps_now(i) { "" } else { p }).collect::<Vec<_>>().join("|")
+}
+
+fn undo_snapshot() -> String {
+    UNDO_KEYS
+        .iter()
+        .map(|k| {
+            let v = host::store_get(k).unwrap_or_default();
+            if *k == "piii:layout2" { layout_no_view(&v) } else { v }
+        })
+        .collect::<Vec<_>>()
+        .join("\u{1}")
+}
+
+/// Called just before the canvas is saved: keeps how it was, once per burst of changes (typing a word, a reset).
+fn undo_mark() {
+    let now = host::now();
+    let s = st();
+    let quiet = now - s.undo_at > 400.0;
+    s.undo_at = now;
+    if !quiet && !s.undo.is_empty() {
+        return;
+    }
+    let snap = undo_snapshot();
+    let s = st();
+    if s.undo.last() != Some(&snap) {
+        s.undo.push(snap);
+        if s.undo.len() > 80 {
+            s.undo.remove(0);
+        }
+    }
+}
+
+/// One step back: the canvas as it was before the last change.
+fn undo() {
+    let now_snap = undo_snapshot();
+    let s = st();
+    // a step that changed nothing is skipped
+    while s.undo.last() == Some(&now_snap) {
+        s.undo.pop();
+    }
+    let Some(snap) = s.undo.pop() else {
+        note("Nothing to undo".to_string());
+        render();
+        return;
+    };
+    let view: Vec<String> = host::store_get("piii:layout2").unwrap_or_default().split('|').map(|x| x.to_string()).collect();
+    for (k, v) in UNDO_KEYS.iter().zip(snap.split('\u{1}')) {
+        let v = if *k == "piii:layout2" && !v.is_empty() {
+            // the view stays where it is now
+            v.split('|').enumerate().map(|(i, p)| if keeps_now(i) && view.len() > i { view[i].clone() } else { p.to_string() }).collect::<Vec<_>>().join("|")
+        } else {
+            v.to_string()
+        };
+        if v.is_empty() {
+            host::store_del(k);
+        } else {
+            host::store_set(k, &v);
+        }
+    }
+    let s = st();
+    s.prog.nodes.clear();
+    s.prog.vals.clear();
+    s.prog.regs.clear();
+    s.prog.sel = None;
+    s.offs = [(0.0, 0.0); NSUP];
+    s.sizes = [(0.0, 0.0); NSUP];
+    s.wire_sel = None;
+    s.held_port = None;
+    prog_load();
+    wires_load();
+    layout_load();
+    // the next change starts a step of its own
+    st().undo_at = 0.0;
+    note("Undone".to_string());
+    render();
+}
+
 fn layout_save() {
+    undo_mark();
     let s = st();
     let mut out = String::new();
     for (x, y) in s.offs.iter() {
@@ -2200,8 +2305,13 @@ fn activate(id: usize, member: Option<u8>) {
             if let Page::Group(g) = s.page {
                 board_reset(g as usize);
             }
+            layer().clear();
+            layer_save();
         }
         S_RESET => {
+            // undo can bring it all back
+            undo_mark();
+            let s = st();
             s.offs = [(0.0, 0.0); NSUP];
             s.sizes = [(0.0, 0.0); NSUP];
             s.zoom = 1.0;
@@ -2221,7 +2331,13 @@ fn activate(id: usize, member: Option<u8>) {
             s.held_port = None;
             host::store_del("piii:layout2");
             host::store_del("piii:wires2");
-            example_load(0);
+            // and clears the canvas: what was drawn on it goes, the example too (owner, 2026-10-14: "reset button should
+            // clear the canvas")
+            program_clear();
+            st().example_on = false;
+            host::store_del("piii:example");
+            layer().clear();
+            layer_save();
         }
         S_RUN => prog_run(None),
         S_STEP => prog_run(Some(1)),

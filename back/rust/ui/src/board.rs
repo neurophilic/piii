@@ -779,7 +779,7 @@ fn group_board(gi: usize) -> N {
             base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-44 -44 88 88").attr("width", "100%").attr("height", "100%").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 43.0)))).into()
         } else {
             // half as big again as made, by area: a canvas, its name up in the corner (owner, 2026-10-14)
-            base.cls("buser").cls_if(bw * bh >= 1.5 * USW * USH, "u-canvas").kid(
+            base.cls("buser").cls_if(label.trim().is_empty(), "empty").cls_if(bw * bh >= 1.5 * USW * USH, "u-canvas").kid(
                 el("input")
                     .cls("buser-in")
                     .attr("type", "text")
@@ -822,5 +822,5 @@ const BOARD_CSS: &str = "\
 .board .buser{display:flex;align-items:center;padding:8px;background:#fff;border:1.6px solid var(--ink);border-radius:18px}\
 .board .buser-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:inherit;font-size:15px;text-align:center;outline:none;cursor:text}.board .buser-in:focus{border-color:var(--accent)}\
 .board-bar{margin-top:10px;justify-content:space-between}\
-.board .buser.u-canvas{align-items:flex-start;padding:12px 14px}.board .buser.u-canvas .buser-in{width:auto;field-sizing:content;min-width:5ch;max-width:100%;border:1.5px solid var(--ink);border-radius:9px;padding:1px 7px;background:#fff;text-align:left}\
+.board .buser.u-canvas.empty .buser-in{display:none}.board .buser.u-canvas{align-items:flex-start;padding:12px 14px}.board .buser.u-canvas .buser-in{width:auto;field-sizing:content;min-width:5ch;max-width:100%;border:1.5px solid var(--ink);border-radius:9px;padding:1px 7px;background:#fff;text-align:left}\
 ";

@@ -676,6 +676,7 @@ fn node_label(s: &State, id: usize) -> String {
 // ---------------------------------------------------------------------------------------------- editing
 
 fn prog_save() {
+    undo_mark();
     let s = st();
     let mut out = String::from("v1\n");
     for n in &s.prog.nodes {
@@ -959,6 +960,33 @@ fn sparkle_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         .into()
 }
 
+/// Grown half as big again as it was made (by area): a super is a canvas, an empty one to draw in (owner, 2026-10-14:
+/// "if a super gets bigger than 50% of its size, it becomes a canvas, empty canvas, which you can draw again inside it").
+fn unode_is_canvas(n: &UNode) -> bool {
+    let (iw, ih) = unode_size(&n.text);
+    n.text != SPARKLE && n.w > 0.0 && n.w * n.h >= 1.5 * iw * ih
+}
+
+/// The supers and sparkles drawn inside a canvas super: the ones lying wholly within it.
+fn unode_inside(s: &State, id: usize) -> Vec<usize> {
+    let Some(p) = unode(s, id) else { return Vec::new() };
+    if !unode_is_canvas(p) {
+        return Vec::new();
+    }
+    let size = |n: &UNode| if n.w > 0.0 { (n.w, n.h) } else { unode_size(&n.text) };
+    let (pw, ph) = size(p);
+    s.prog
+        .nodes
+        .iter()
+        .filter(|n| n.id != id)
+        .filter(|n| {
+            let (w, h) = size(n);
+            w * h < pw * ph && n.x >= p.x && n.y >= p.y && n.x + w <= p.x + pw && n.y + h <= p.y + ph
+        })
+        .map(|n| n.id)
+        .collect()
+}
+
 fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
     if n.text == SPARKLE {
         return sparkle_view(s, n, r, mini);
@@ -977,8 +1005,7 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
     let a = ((n.id - UBASE) as u16) << 4;
     // grown to half as big again as it was made (by area), a super is a canvas: its name up in the corner and room
     // below it (owner, 2026-10-14: "if a new super becomes 50% larger than its initial state, it turns into a canvas")
-    let (iw, ih) = unode_size(&n.text);
-    let canvas = n.w > 0.0 && n.w * n.h >= 1.5 * iw * ih;
+    let canvas = unode_is_canvas(n);
     el("div")
         .cls("sx unode")
         .cls_if(canvas, "u-canvas")
@@ -1066,6 +1093,7 @@ const PROG_CSS: &str = "\
 .sx.unode.u-canvas{justify-content:flex-start;align-items:flex-start;padding:12px 14px;border-radius:18px}\
 .sx.unode.u-canvas .u-text,.sx.unode.u-canvas.empty .u-text{width:auto;field-sizing:content;min-width:5ch;max-width:100%;border:1.5px solid #2b2b2b;border-radius:9px;padding:1px 7px;background:#fff;text-align:left}\
 .sx.unode.u-canvas .u-val{margin-top:auto;align-self:flex-end;max-width:100%}\
+.sx.unode.u-canvas.empty .u-text{display:none}\
 .u-text{font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;border:0;background:transparent;width:100%;padding:0;color:var(--ink);text-align:center;outline:none;cursor:text}\
 .sx.unode.empty .u-text{border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px}.sx.unode.empty .u-text:focus{border-color:var(--accent)}\
 .u-val{font-size:11.5px;color:var(--faint);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}\

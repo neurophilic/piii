@@ -279,6 +279,7 @@ fn ledger_update(t: Tool, a: u16, v: String) {
         (Tool::Ledger, 51) => open_modal(Modal::Info("The API".into(), API_GUIDE.into())),
         (Tool::Ledger, 52) => example_toggle(),
         (Tool::Ledger, 53) => wire_mode_toggle(),
+        (Tool::Ledger, 54) => undo(),
         (Tool::Ledger, 2) => ex_fetch(),
         (Tool::Ledger, 3) => l.ex_min = v,
         (Tool::Ledger, 4) => {

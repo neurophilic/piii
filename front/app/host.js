@@ -93,11 +93,13 @@ const host = {
         if (t - last < 450) { last = 0; const r = (n.querySelector(".win-in") || n).getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top)); } else last = t;
       });
     }
-    else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } });
+    // a canvas super's inside is canvas too: you draw in it (not on its name)
+    else if (k === "dbl") n.addEventListener("dblclick", (e) => { const sol = e.target.closest("[data-solid]"); if (!sol || (sol.classList.contains("u-canvas") && !e.target.closest("input"))) { e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } });
     else if (k === "dbl2") {
       let last = 0;
       n.addEventListener("contextmenu", (e) => {
-        if (e.target.closest("[data-solid]")) return;
+        const sol = e.target.closest("[data-solid]");
+        if (sol && !(sol.classList.contains("u-canvas") && !e.target.closest("input"))) return;
         e.preventDefault();
         const t = Date.now();
         if (t - last < 450) { last = 0; const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } else last = t;
@@ -298,6 +300,7 @@ addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   if (e.key === "Delete" || e.key === "Backspace" || e.key === "Escape") { const [p, l] = put(e.key); W.keyed(p, l); }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === "z" || e.key === "Z")) { e.preventDefault(); const [p, l] = put("Undo"); W.keyed(p, l); }
   // keys a game steers with, down (+) and up (−); the program says whether it used them
   if (STEER.has(e.key)) { const [p, l] = put("+" + e.key); if (W.keyed(p, l) === 1) e.preventDefault(); }
 });
@@ -331,9 +334,14 @@ addEventListener("pointercancel", (e) => { if (capturing) W.pointer(2, e.clientX
 // Zoom is piii's own, the same everywhere, and never the browser's (owner, 2026-10-14): a pinch, Ctrl/⌘ and the wheel,
 // or Ctrl/⌘ with +, − or 0 zoom what is shown (the canvas, or the open page) and the browser's zoom stays as it is.
 const zoomBy = (dy, x, y) => W.zoomed(dy, x, y);
+// No scrolling anywhere, only zoom (owner, 2026-10-14: "delete the scrolling function all over and just keep the zoom
+// function"): the wheel and two fingers zoom about the pointer; dragging pans. The sidebar's list alone still scrolls.
 addEventListener("wheel", (e) => {
-  if (!(e.ctrlKey || e.metaKey)) return;
-  e.preventDefault(); e.stopPropagation(); zoomBy(e.deltaY, e.clientX, e.clientY);
+  const t = e.target instanceof Element ? e.target : null;
+  if (!(e.ctrlKey || e.metaKey) && t && t.closest(".rail")) return;
+  e.preventDefault(); e.stopPropagation();
+  const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+  if (dy) zoomBy(dy, e.clientX, e.clientY);
 }, { passive: false, capture: true });
 addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;

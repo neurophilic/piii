@@ -229,7 +229,7 @@ overflow:hidden;text-overflow:ellipsis}
 .win.picked{outline:3px solid var(--accent);outline-offset:2px}
 .win{min-width:360px;min-height:240px;position:fixed;z-index:8;left:88px;top:12px;right:12px;bottom:12px;display:flex;flex-direction:column;background:var(--card);
 border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 18px 50px -30px rgba(20,20,30,.35)}
-.win-head{flex:none;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 22px;border-bottom:1px solid var(--line)}
+.win-head{flex:none;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 22px}
 .win-title{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .win-x{flex:none;width:34px;height:34px;border-radius:11px;border:1px solid var(--line2);background:var(--card);cursor:pointer;
 font-size:20px;line-height:1;color:var(--muted)}
@@ -262,7 +262,7 @@ font-size:20px;line-height:1;color:var(--muted)}
 @media print{.rail,.win-head,.foot,.consent{display:none!important}.win{position:static;border:0;box-shadow:none}.win-body{overflow:visible}}
 /* the canvas, as the site has always looked */
 .scene{position:fixed;inset:0;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
-.frame{position:absolute;inset:0;border:2px solid var(--accent);pointer-events:none;z-index:3}
+.frame{position:absolute;inset:0;border:2px solid var(--accent);pointer-events:none;z-index:3}.scene:not(.floating):not(.picked)>.frame{border-color:#d6d6d1}
 .stage{position:absolute;left:0;top:0;width:1440px;height:900px;transform-origin:0 0}
 .wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
 .wires{--wz:1}.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:calc(1.8px*var(--wz));stroke-linejoin:round;stroke-linecap:round}
@@ -331,7 +331,7 @@ border-radius:0 0 0 6px}
 .ric .pt.l{left:-5px;top:calc(50% - 4.5px)}.ric .pt.r{right:-5px;top:calc(50% - 4.5px)}.ric .pt.t{top:-5px;left:calc(50% - 4.5px)}.ric .pt.b{bottom:-5px;left:calc(50% - 4.5px)}
 .win{border-radius:0;border:1.5px solid #2b2b2b;overflow:visible;box-shadow:0 18px 50px -30px rgba(20,20,30,.35)}
 .win-body{border-radius:0}
-.win-head{border-bottom:1px solid #d6d6d1}
+.win-head{border-bottom:0}
 .win-title.tag{flex:none;color:var(--ink);font-size:15px;max-width:calc(100% - 60px)}
 .win-head{justify-content:space-between}
 .win-x{border-radius:0;border:1.5px solid #2b2b2b;color:var(--ink)}

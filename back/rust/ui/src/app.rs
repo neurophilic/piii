@@ -284,6 +284,11 @@ struct State {
     wire_mode: bool,
     /// when a locked super was last pulled at: the lock blinks for a moment
     lock_blink: f64,
+    /// the canvas as it was before each change, newest last: the undo button steps back through them
+    undo: Vec<String>,
+    undo_at: f64,
+    /// when the last press on the canvas was let go (its click comes after)
+    drag_end_at: f64,
     /// sparkles (0) and supers (1) drawn on pages, by the page's address: kind, x, y, label
     layers: BTreeMap<String, Vec<(u8, f64, f64, String)>>,
     /// where the open window has been moved to (px from its place), once unlocked
@@ -454,6 +459,9 @@ pub fn start() {
         example_on: false,
         wire_mode: false,
         lock_blink: 0.0,
+        undo: Vec::new(),
+        undo_at: 0.0,
+        drag_end_at: 0.0,
         layers: BTreeMap::new(),
         win_off: (0.0, 0.0),
         pan_drag: None,
@@ -1618,8 +1626,12 @@ fn update(msg: Msg) {
                 host::capture(false);
             }
             // a click on the bare canvas lets the selection go (the click that just selected a super bubbles here too)
-            if i == 255 && host::now() - s.last_tap.2 > 120.0 {
+            // and selects the main canvas, which can always be selected (owner, 2026-10-14): what was selected before
+            // locks again, as when any other super is selected
+            if i == 255 && host::now() - s.last_tap.2 > 120.0 && s.drag.is_none() && host::now() - s.drag_end_at > 150.0 {
                 s.sup_pick = None;
+                s.prog.sel = None;
+                relock_except(None, None, false);
             }
             s.wire_sel = if i == 255 || s.wire_sel == Some(i as usize) { None } else { Some(i as usize) };
             if s.wire_sel.is_some() {
@@ -3362,6 +3374,18 @@ fn ctl_bar(s: &State) -> N {
                 .attr("aria-pressed", if s.wire_mode { "true" } else { "false" })
                 .on("click", Msg::T(Tool::Ledger, 53, String::new()))
                 .kid(svg_icon(&["M12 5v14", "M5 12h14"], "26", if s.wire_mode { "ci accent" } else { "ci" }))
+                .kid(ports()),
+        )
+        // undo: one step back on the canvas, again and again (owner, 2026-10-14: "make sure undo button works"); also
+        // Ctrl/⌘ + Z
+        .kid(
+            el("button")
+                .attr("type", "button")
+                .cls("ric ctlb")
+                .attr("title", "Undo: one step back (Ctrl/⌘ + Z)")
+                .attr("aria-label", "Undo")
+                .on("click", Msg::T(Tool::Ledger, 54, String::new()))
+                .kid(svg_icon(&["M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11"], "24", "ci"))
                 .kid(ports()),
         )
         .into()
