@@ -702,7 +702,7 @@ fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
     let (bw, bh) = (46.0, 44.0);
     let narrow = vw < 700.0;
     let gap = if narrow { 22.0 } else { 30.0 };
-    let top = if narrow { vh - ((vw / 2.0 - 12.0).min(vh * 0.3) + 24.0) - bh } else { 10.0 };
+    let top = if narrow { vh - 80.0 - bh } else { 10.0 };
     let left = vw / 2.0 - (4.0 * bw + 3.0 * gap) / 2.0 + i as f64 * (bw + gap);
     (left, top, bw, bh)
 }

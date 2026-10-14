@@ -403,5 +403,5 @@ color:var(--paper);font-size:16px;line-height:1}
 /* a window resized larger than the screen (or kept from a bigger one) still shows its every edge */
 .win{max-width:calc(100vw - 100px);max-height:calc(100vh - 24px)}
 .focus.peek .win{max-width:calc((100vw - 100px) * .85 - 12px);max-height:calc(85vh - 12px)}
-@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:76px}.win{left:8px;bottom:calc(min(50vw - 12px,30vh) + 88px);min-width:0;max-width:calc(100vw - 16px);max-height:calc(100vh - 96px - min(50vw - 12px,30vh))}}
+@media (max-width:699px){.scene.floating{top:auto;right:12px;bottom:76px}.win{left:8px;bottom:136px;min-width:0;max-width:calc(100vw - 16px);max-height:calc(100vh - 144px)}}
 "#;

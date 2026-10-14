@@ -1515,7 +1515,8 @@ fn view(s: &State) -> N {
         if s.peek && host::vw() >= 700.0 {
             el("div").cls("focus peek").kid(scene_view(s, false)).kid(rail(s)).kid(window_frame(s, page)).kid(ctl_bar(s)).into()
         } else {
-            el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
+            // no floating copy of the canvas over a page (owner, 2026-10-14: "remove this"); π in the sidebar goes back
+            el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(ctl_bar(s)).into()
         }
     };
     // the canvas shows its own note; elsewhere it floats over the page, so the lock's answers are always seen
