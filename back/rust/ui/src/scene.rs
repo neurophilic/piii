@@ -678,17 +678,14 @@ back. Start in Assess a Manuscript; the rest of the lab is round it.";
 fn bubble_inside(gi: usize, small: bool) -> Vec<N> {
     let g = &GROUPS[gi];
     let mut v: Vec<N> = Vec::new();
-    v.push(el("span").cls("tag").text(if small { "" } else { g.title }).into());
+    let _ = small;
+    v.push(el("span").cls("tag").text(g.title).into());
     let mut bars = el("span").cls("bars-tree");
     for (m, (name, _)) in g.members.iter().enumerate() {
-        bars = bars.kid(
-            el("span")
-                .cls("bar-i")
-                .attr("title", *name)
-                .attr("aria-label", *name)
-                .attr("role", "button")
-                .on("pdown", Msg::PMember(m as u8)),
-        );
+        // a bar has no words on it, so it is not a button (owner, 2026-10-14: "I should not be able to click an object
+        // if I can't read it"); the click goes to the super, whose window lists each member by name
+        let _ = (m, name);
+        bars = bars.kid(el("span").cls("bar-i").attr("aria-hidden", "true"));
     }
     v.push(bars.into());
     v
@@ -698,10 +695,11 @@ fn tools_inside() -> Vec<N> {
     let g = &GROUPS[0];
     let mut bars = el("span").cls("t-bars");
     for (m, (name, _)) in g.members.iter().enumerate() {
-        bars = bars.kid(el("span").cls("t-bar").attr("title", *name).attr("aria-label", *name).attr("role", "button").on("pdown", Msg::PMember(m as u8)));
+        let _ = (m, name);
+        bars = bars.kid(el("span").cls("t-bar").attr("aria-hidden", "true"));
     }
     let mut v: Vec<N> = Vec::new();
-    v.push(el("span").cls("t-in").attr("title", "Tools").into());
+    v.push(el("span").cls("t-in").text("Tools").into());
     v.push(el("span").cls("t-brace").into());
     v.push(bars.into());
     v
@@ -832,7 +830,11 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls_if(!mini && locked(s, id) && id >= S_WELCOME, "locked")
             .attr("data-s", format!("{}", id))
             .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
-        sx = if mini { sx.on("click", Msg::Activate(id as u8)) } else { sx.on("pdown", Msg::PDown(id as u8, String::new())) };
+        // only what can be read is clickable: not the small canvas floating on an open super (too small to read; the
+        // rail and π get about), and not the holder, which has no words
+        if !mini && id != S_HOLD {
+            sx = sx.on("pdown", Msg::PDown(id as u8, String::new()));
+        }
         let label = sup_label(id);
         if !label.is_empty() && id != S_HOLD && !mini {
             sx = sx.attr("tabindex", "0").attr("role", "button").attr("aria-label", label).on("enter", Msg::Activate(id as u8));
