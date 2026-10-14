@@ -229,6 +229,10 @@ struct State {
     c_busy: bool,
     // the canvas: where supers were moved, the view, lock and chain, a drag under way
     offs: [(f64, f64); NSUP],
+    /// how much each super was grown or shrunk by the middle button
+    sizes: [(f64, f64); NSUP],
+    /// the canvas's zoom (1 = fits the window)
+    zoom: f64,
     pan: (f64, f64),
     locked: bool,
     chained: bool,
@@ -364,6 +368,8 @@ pub fn start() {
         c_err: None,
         c_busy: false,
         offs: [(0.0, 0.0); NSUP],
+        sizes: [(0.0, 0.0); NSUP],
+        zoom: 1.0,
         pan: (0.0, 0.0),
         locked: false,
         chained: true,

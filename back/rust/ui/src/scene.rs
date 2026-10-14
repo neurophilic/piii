@@ -79,9 +79,9 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
                 (724.0, 96.0, 692.0, 734.0),
                 (370.0, 540.0, 330.0, 220.0),
                 (24.0, 540.0, 320.0, 220.0),
-                (996.0, 9.0, 50.0, 48.0),
-                (1080.0, 9.0, 50.0, 48.0),
-                (1164.0, 9.0, 50.0, 48.0),
+                (896.0, 9.0, 50.0, 48.0),
+                (980.0, 9.0, 50.0, 48.0),
+                (980.0, 9.0, 50.0, 48.0),
             ],
             1440.0,
             900.0,
@@ -114,7 +114,7 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
                 (8.0, 516.0, 330.0, 216.0),
                 (240.0, 1460.0, 50.0, 48.0),
                 (324.0, 1460.0, 50.0, 48.0),
-                (408.0, 1460.0, 50.0, 48.0),
+                (324.0, 1460.0, 50.0, 48.0),
             ],
             700.0,
             1515.0,
@@ -375,8 +375,14 @@ fn ctl_wired(s: &State, ctl: usize) -> bool {
     s.wires.iter().any(|w| w.0 == ctl)
 }
 
+/// Every super stays where it is unless a wire from the lock reaches it (owner, 2026-10-14: "every canvas is locked
+/// in place unless it is connected to lock icon"). A click on the lock frees them all until it is clicked again
+/// (`s.locked` holds that: true = all free). A program's own nodes are its editing, so they always move.
 fn locked(s: &State, id: usize) -> bool {
-    s.locked || arriving(s, id, Tip::Control, 0).contains(&S_LOCK)
+    if is_unode(id) {
+        return false;
+    }
+    !(s.locked || arriving(s, id, Tip::Control, 0).contains(&S_LOCK))
 }
 
 fn chain_on(s: &State, id: usize) -> bool {
@@ -550,13 +556,19 @@ fn rect(g: &Geo, id: usize) -> Rect {
 
 fn geo(s: &State) -> Geo {
     let (w, h) = (host::vw(), host::vh());
-    geo_box(s, w, h, w < 700.0)
+    geo_zoom(s, w, h, w < 700.0, s.zoom)
 }
 
 /// The canvas laid out in a box of w × h: the whole page, or the floating π canvas over an open super.
 fn geo_box(s: &State, w: f64, h: f64, narrow: bool) -> Geo {
+    geo_zoom(s, w, h, narrow, 1.0)
+}
+
+/// The canvas at a zoom (the whole page zooms without end, in or out; the floating copy always fits).
+fn geo_zoom(s: &State, w: f64, h: f64, narrow: bool, zoom: f64) -> Geo {
     let (b, dw, dh) = base(narrow);
-    let k = (w / dw).min(h / dh).max(0.2);
+    let zoom = if zoom.is_finite() && zoom > 0.0 { zoom } else { 1.0 };
+    let k = (w / dw).min(h / dh).max(0.2) * zoom;
     let ox = (w - dw * k) / 2.0;
     let oy = (h - dh * k) / 2.0;
     let mut rects = b;
@@ -565,6 +577,8 @@ fn geo_box(s: &State, w: f64, h: f64, narrow: bool) -> Geo {
         let pan = if i >= S_SITE && !matches!(i, S_RUN | S_STEP | S_CLEAR) { s.pan } else { (0.0, 0.0) };
         r.0 += dx + pan.0;
         r.1 += dy + pan.1;
+        r.2 += s.sizes[i].0;
+        r.3 += s.sizes[i].1;
     }
     let (px, py, _, _) = rects[S_PROG];
     let extra = s.prog.nodes.iter().map(|n| {
@@ -687,9 +701,9 @@ fn control_icon(id: usize, s: &State) -> N {
     match id {
         S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if ctl_wired(s, S_SAVE) { "ci accent" } else { "ci" }),
         S_LOCK => {
-            if s.locked || ctl_wired(s, S_LOCK) {
+            if !s.locked {
                 el("svg:svg")
-                    .cls("ci accent")
+                    .cls(if ctl_wired(s, S_LOCK) { "ci accent" } else { "ci" })
                     .attr("viewBox", "0 0 24 24")
                     .attr("width", "26")
                     .attr("height", "26")
@@ -698,7 +712,7 @@ fn control_icon(id: usize, s: &State) -> N {
                     .kid(el("svg:rect").attr("x", "4.5").attr("y", "10").attr("width", "15").attr("height", "11").attr("rx", "2").attr("fill", "currentColor"))
                     .into()
             } else {
-                svg_icon(&["M7 10V7a5 5 0 0 1 9.6-2", "M4.5 10h15v11h-15z"], "26", "ci")
+                svg_icon(&["M7 10V7a5 5 0 0 1 9.6-2", "M4.5 10h15v11h-15z"], "26", "ci accent")
             }
         }
         S_CHAIN => svg_icon(
@@ -729,9 +743,9 @@ fn sup_label(id: usize) -> &'static str {
         S_STEP => "One step",
         S_CLEAR => "Clear the values",
         S_SAVE => "Save the layout",
-        S_LOCK => "Lock: supers stay where they are",
+        S_LOCK => "Lock: every super stays where it is; wire this into one to let it move, or click to free them all",
         S_CHAIN => "Chain: a holder brings what it holds",
-        S_RESET => "Reset: back to the start",
+        S_RESET => "Reset: this canvas back to the start",
         S_LEFT => "Move left",
         S_UP => "Move up",
         S_DOWN => "Move down",
@@ -977,6 +991,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         .on("click", Msg::WireSel(255))
         .on("dbl", Msg::Dbl(false, String::new()))
         .on("dbl2", Msg::Dbl(true, String::new()))
+        .on("mwheel", Msg::TV(Tool::Grid, 50))
         .kid(el("div").cls("frame"))
         .kid(stage)
         .kid_if(!s.note.is_empty(), || el("div").cls("wire-note").attr("role", "status").text(s.note.clone()).into())
@@ -1098,7 +1113,12 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                     Some((a, ta)) => matches!(tip, Tip::Control | Tip::Gate) && can_relay(s, a, ta, id, tip).is_ok(),
                     None => false,
                 };
+            // a tip with nothing on it stays out of sight until the pointer comes near or a wire is being made
+            // (owner, 2026-10-14: "make this canvas look less cluttery")
+            let wired = s.wires.iter().any(|w| (w.0 == id && tip == Tip::Out) || (w.1 == id && w.2 == tip))
+                || s.passes.iter().any(|p| (p.0 == id && p.1 == tip) || (p.2 == id && p.3 == tip));
             let mut gp = el("svg:g")
+                .cls_if(wired || mini, "wired")
                 .attr("data-p", format!("{}-{}", id, tip.name()))
                 .attr("data-solid", "1")
                 .cls("port")
@@ -1162,7 +1182,7 @@ fn port_click(id: usize, tip: Tip) {
                         }
                         format!("Back where it started: {}", name_of(id))
                     }
-                    S_LOCK => format!("Locked: {} stays where it is while this wire is there", name_of(id)),
+                    S_LOCK => format!("Unlocked: {} can be moved while this wire is there", name_of(id)),
                     S_CHAIN => format!("Chained: {} brings what it holds", name_of(id)),
                     S_SAVE => {
                         layout_save();
@@ -1219,6 +1239,10 @@ pub struct Drag {
     moved: bool,
     start: Vec<(usize, (f64, f64))>,
     pan0: (f64, f64),
+    /// how it was pressed (owner, 2026-10-14: "Shift plus click drags or middle mouse resizes supers"):
+    /// 0 a click, 1 shift + click (moves it, locked or not), 2 the middle button (resizes it)
+    how: u8,
+    size0: (f64, f64),
 }
 
 /// Where a super has been moved to (its offset), or where a program node is in its super.
@@ -1243,6 +1267,7 @@ fn begin_drag(id: usize, at: &str) {
     let mut it = at.split(',');
     let x: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let y: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+    let how: u8 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
     let g = geo(s);
     if s.held_port.is_some() {
         // a wire is being made: a press on a super lets it go
@@ -1259,7 +1284,7 @@ fn begin_drag(id: usize, at: &str) {
         s.prog.sel = Some(id);
     }
     let start = ids.iter().map(|i| (*i, pos_of(s, *i))).collect();
-    s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan });
+    s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan, how, size0: if id < NSUP { s.sizes[id] } else { (0.0, 0.0) } });
     host::capture(true);
 }
 
@@ -1475,7 +1500,8 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         render();
         return;
     }
-    let movable = s.drag.as_ref().map(|d| !locked(s, d.id) && d.id >= S_WELCOME).unwrap_or(false);
+    let movable = s.drag.as_ref().map(|d| d.how != 2 && (d.how == 1 || !locked(s, d.id)) && d.id >= S_WELCOME).unwrap_or(false);
+    let resizable = s.drag.as_ref().map(|d| d.how == 2 && d.id >= S_WELCOME && d.id < NSUP && !is_ctl_super(d.id)).unwrap_or(false);
     let Some(d) = s.drag.as_mut() else {
         host::capture(false);
         return;
@@ -1495,7 +1521,13 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                     return;
                 }
             }
-            if d.moved && movable {
+            if d.moved && resizable {
+                let (b, _, _) = base(host::vw() < 700.0);
+                let (bw, bh) = (b[d.id].2, b[d.id].3);
+                let (w, h) = ((bw + d.size0.0 + dx).max(48.0), (bh + d.size0.1 + dy).max(40.0));
+                s.sizes[d.id] = (w - bw, h - bh);
+                s.dirty = true;
+            } else if d.moved && movable {
                 for (i, (ox, oy)) in d.start.clone() {
                     set_pos(s, i, (ox + dx, oy + dy));
                 }
@@ -1509,7 +1541,11 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         1 => {
             host::capture(false);
             let d = s.drag.take().unwrap();
-            if !d.moved {
+            if d.how == 2 {
+                if d.moved {
+                    layout_save();
+                }
+            } else if !d.moved {
                 activate(d.id, d.member);
             } else if is_unode(d.id) {
                 prog_save();
@@ -1524,6 +1560,44 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
     }
 }
 
+/// The wheel over the canvas: zoom about the pointer, as far in or out as you like (owner, 2026-10-14: "zooming in
+/// and zooming out can be indefinitely"). The value is deltaY, then x, y within the canvas.
+fn canvas_zoom(v: &str) {
+    let s = st();
+    let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+    let (dy, px, py) = (n.first().copied().unwrap_or(0.0), n.get(1).copied().unwrap_or(0.0), n.get(2).copied().unwrap_or(0.0));
+    let g0 = geo(s);
+    // the design point under the pointer, before
+    let d = ((px - g0.ox) / g0.k - s.pan.0, (py - g0.oy) / g0.k - s.pan.1);
+    let f = libm_exp(-dy * 0.0015);
+    let z = s.zoom * f;
+    if !(z.is_finite() && z > 1e-300 && z < 1e300) {
+        return;
+    }
+    s.zoom = z;
+    let g1 = geo(s);
+    s.pan = ((px - g1.ox) / g1.k - d.0, (py - g1.oy) / g1.k - d.1);
+    layout_save();
+}
+
+fn libm_exp(x: f64) -> f64 {
+    // e^x = 2^(x / ln 2): the integer part by doubling, the rest by its series
+    let t = x / core::f64::consts::LN_2;
+    let i = if t >= 0.0 { t as i64 } else { t as i64 - 1 };
+    let r = (t - i as f64) * core::f64::consts::LN_2;
+    let (mut term, mut sum) = (1.0, 1.0);
+    for k in 1..20 {
+        term *= r / k as f64;
+        sum += term;
+    }
+    let mut p = 1.0f64;
+    let base = if i >= 0 { 2.0 } else { 0.5 };
+    for _ in 0..i.unsigned_abs().min(2000) {
+        p *= base;
+    }
+    sum * p
+}
+
 pub fn on_resize() {
     render();
 }
@@ -1534,7 +1608,11 @@ fn layout_save() {
     for (x, y) in s.offs.iter() {
         out.push_str(&format!("{:.1},{:.1};", x, y));
     }
-    out.push_str(&format!("|{:.1},{:.1}|{}|{}", s.pan.0, s.pan.1, s.locked as u8, s.chained as u8));
+    out.push_str(&format!("|{:.1},{:.1}|{}|{}|", s.pan.0, s.pan.1, s.locked as u8, s.chained as u8));
+    for (w, h) in s.sizes.iter() {
+        out.push_str(&format!("{:.1},{:.1};", w, h));
+    }
+    out.push_str(&format!("|{}", s.zoom));
     host::store_set("piii:layout2", &out);
     s.dirty = false;
 }
@@ -1557,6 +1635,13 @@ fn layout_load() {
     }
     s.locked = parts.get(2) == Some(&"1");
     s.chained = parts.get(3) != Some(&"0");
+    s.zoom = parts.get(5).and_then(|v| v.parse::<f64>().ok()).filter(|z| z.is_finite() && *z > 0.0).unwrap_or(1.0);
+    if let Some(sz) = parts.get(4) {
+        for (i, p) in sz.split(';').filter(|p| !p.is_empty()).enumerate().take(NSUP) {
+            let mut xy = p.split(',');
+            s.sizes[i] = (xy.next().and_then(|v| v.parse().ok()).unwrap_or(0.0), xy.next().and_then(|v| v.parse().ok()).unwrap_or(0.0));
+        }
+    }
 }
 
 fn activate(id: usize, member: Option<u8>) {
@@ -1571,8 +1656,17 @@ fn activate(id: usize, member: Option<u8>) {
             s.chained = !s.chained;
             layout_save();
         }
+        // on a super's own canvas the reset puts that canvas back (owner, 2026-10-14: "merge the reset this canvas
+        // button with this")
+        S_RESET if matches!(s.page, Page::Group(_)) => {
+            if let Page::Group(g) = s.page {
+                board_reset(g as usize);
+            }
+        }
         S_RESET => {
             s.offs = [(0.0, 0.0); NSUP];
+            s.sizes = [(0.0, 0.0); NSUP];
+            s.zoom = 1.0;
             s.pan = (0.0, 0.0);
             s.locked = false;
             s.chained = true;

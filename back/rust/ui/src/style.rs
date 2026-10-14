@@ -273,6 +273,7 @@ font-size:20px;line-height:1;color:var(--muted)}
 .ports-svg .port.on .mark{fill:var(--accent);stroke:var(--accent)}
 .ports-svg .port.target .mark{stroke:var(--accent);stroke-width:3.2;fill:#eef0fe}
 .scene.floating .ports-svg .port{pointer-events:none}
+.ports-svg .port .mark{transition:opacity .15s}.ports-svg .port:not(.wired):not(.on):not(.target) .mark{opacity:0}.ports-svg .port:hover .mark,.wiring .ports-svg .port .mark,.board-ports.holding .port .mark{opacity:1}
 .wires .ports,.map .ports{fill:var(--ink)}
 .sx{position:absolute;background:var(--card);border:1px solid #9a9a95;box-sizing:border-box;cursor:grab;overflow:hidden;
 box-shadow:0 10px 24px -18px rgba(25,25,25,.35)}

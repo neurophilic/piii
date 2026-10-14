@@ -55,7 +55,11 @@ const host = {
   listen: (id, kp, kl) => {
     const n = nodes[id], k = str(kp, kl);
     if (k === "enter") n.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(id, k, n.value || ""); } });
-    else if (k === "pdown") n.addEventListener("pointerdown", (e) => { if (e.button === 0) send(id, k, e.clientX + "," + e.clientY); });
+    // a press: x, y, then how: 0 a click, 1 shift + click (drags), 2 the middle button (resizes)
+    else if (k === "pdown") n.addEventListener("pointerdown", (e) => {
+      if (e.button === 1) e.preventDefault();
+      if (e.button === 0 || e.button === 1) send(id, k, e.clientX + "," + e.clientY + "," + (e.button === 1 ? 2 : e.shiftKey ? 1 : 0));
+    });
     // a double click (left: "dbl", right: "dbl2") on the node itself, not on anything marked data-solid inside it
     // the pointer over a surface that draws itself (the map): x, y within it, and its width and height
     else if (k === "mdown" || k === "mmove" || k === "mup" || k === "mwheel") {

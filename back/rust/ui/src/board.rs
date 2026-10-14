@@ -11,6 +11,8 @@ pub struct Board {
     /// sparkles (label empty) and supers of your own, after the members: kind, x, y, label
     extra: Vec<(u8, f64, f64, String)>,
     links: Vec<(usize, usize, u8)>,
+    /// growth of each node by the middle button
+    sizes: Vec<(f64, f64)>,
     sel: Option<usize>,
     held: Option<usize>,
     note: String,
@@ -23,6 +25,8 @@ pub struct BoardDrag {
     sy: f64,
     p0: (f64, f64),
     moved: bool,
+    how: u8,
+    s0: (f64, f64),
 }
 
 const BW: f64 = 220.0;
@@ -76,6 +80,7 @@ fn board_load(gi: usize, b: &mut Board) {
         let a = e.arr();
         (a.first().map(|x| x.f() as u8).unwrap_or(0), a.get(1).map(|x| x.f()).unwrap_or(0.0), a.get(2).map(|x| x.f()).unwrap_or(0.0), a.get(3).map(|x| x.text()).unwrap_or_default())
     }).collect();
+    b.sizes = v.get("sizes").arr().iter().map(|p| (p.arr().first().map(|x| x.f()).unwrap_or(0.0), p.arr().get(1).map(|x| x.f()).unwrap_or(0.0))).collect();
     if !v.get("links").is_null() {
         let total = n + b.extra.len();
         b.links = v.get("links").arr().iter().filter_map(|l| {
@@ -91,20 +96,24 @@ fn board_save(gi: usize) {
     let pos: Vec<String> = b.pos.iter().map(|(x, y)| format!("[{:.0},{:.0}]", x, y)).collect();
     let extra: Vec<String> = b.extra.iter().map(|(k, x, y, l)| format!("[{},{:.0},{:.0},{}]", k, x, y, json::quote(l))).collect();
     let links: Vec<String> = b.links.iter().map(|(a, c, t)| format!("[{},{},{}]", a, c, t)).collect();
-    host::store_set(&board_key(gi), &format!("{{\"pos\":[{}],\"extra\":[{}],\"links\":[{}]}}", pos.join(","), extra.join(","), links.join(",")));
+    let sizes: Vec<String> = b.sizes.iter().map(|(w, h)| format!("[{:.0},{:.0}]", w, h)).collect();
+    host::store_set(&board_key(gi), &format!("{{\"pos\":[{}],\"extra\":[{}],\"links\":[{}],\"sizes\":[{}]}}", pos.join(","), extra.join(","), links.join(","), sizes.join(",")));
 }
 
 /// A node's box on the board: a member, a sparkle or a super of your own.
 fn bnode(b: &Board, i: usize) -> (f64, f64, f64, f64) {
-    if i < b.pos.len() {
+    let (gw, gh) = b.sizes.get(i).copied().unwrap_or((0.0, 0.0));
+    let (x, y, w, h) = if i < b.pos.len() {
         let (x, y) = b.pos[i];
-        return (x, y, BW, BH);
-    }
-    match b.extra.get(i - b.pos.len()) {
-        Some((0, x, y, _)) => (*x, *y, SPARK, SPARK),
-        Some((_, x, y, _)) => (*x, *y, USW, USH),
-        None => (0.0, 0.0, 0.0, 0.0),
-    }
+        (x, y, BW, BH)
+    } else {
+        match b.extra.get(i - b.pos.len()) {
+            Some((0, x, y, _)) => (*x, *y, SPARK, SPARK),
+            Some((_, x, y, _)) => (*x, *y, USW, USH),
+            None => return (0.0, 0.0, 0.0, 0.0),
+        }
+    };
+    (x, y, (w + gw).max(36.0), (h + gh).max(32.0))
 }
 
 fn btip(b: &Board, i: usize, t: u8) -> (f64, f64) {
@@ -161,7 +170,17 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 4.0 {
                 d.moved = true;
             }
-            if d.moved {
+            // as on every canvas: a super stays put unless the lock has freed them or shift is held; the middle
+            // button resizes it
+            if d.moved && d.how == 2 {
+                let (gx, gy) = (d.s0.0 + x - d.sx, d.s0.1 + y - d.sy);
+                let b = board(gi);
+                while b.sizes.len() <= node {
+                    b.sizes.push((0.0, 0.0));
+                }
+                b.sizes[node] = (gx, gy);
+            } else if d.moved && (d.how == 1 || st().locked) {
+                let d = st().board_drag.as_mut().unwrap();
                 let p = ((d.p0.0 + x - d.sx).max(0.0), (d.p0.1 + y - d.sy).max(0.0));
                 let b = board(gi);
                 if node < b.pos.len() {
@@ -175,10 +194,11 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
         _ => {
             host::capture(false);
             let moved = d.moved;
+            let how = d.how;
             s.board_drag = None;
             if moved {
                 board_save(gi);
-            } else if phase == 1 && node < board(gi).pos.len() {
+            } else if phase == 1 && how != 2 && node < board(gi).pos.len() {
                 // a press without a move is a click: it opens the member
                 board_open(gi, node);
             }
@@ -189,6 +209,10 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
 }
 
 fn board_update(a: u16, v: String) {
+    if a == 50 {
+        canvas_zoom(&v);
+        return;
+    }
     let gi = match st().page {
         Page::Group(g) => g as usize,
         _ => return,
@@ -213,7 +237,9 @@ fn board_update(a: u16, v: String) {
                 return;
             }
             let (x, y, _, _) = bnode(b, node);
-            st().board_drag = Some(BoardDrag { gi, node, sx: nums.first().copied().unwrap_or(0.0), sy: nums.get(1).copied().unwrap_or(0.0), p0: (x, y), moved: false });
+            let s0 = b.sizes.get(node).copied().unwrap_or((0.0, 0.0));
+            let how = nums.get(2).copied().unwrap_or(0.0) as u8;
+            st().board_drag = Some(BoardDrag { gi, node, sx: nums.first().copied().unwrap_or(0.0), sy: nums.get(1).copied().unwrap_or(0.0), p0: (x, y), moved: false, how, s0 });
             host::capture(true);
         }
         // a tip: node,tip
@@ -262,14 +288,17 @@ fn board_update(a: u16, v: String) {
             }
             board_save(gi);
         }
-        7 => {
-            host::store_del(&board_key(gi));
-            let b = board(gi);
-            b.loaded = false;
-            board_load(gi, b);
-        }
+        7 => board_reset(gi),
         _ => {}
     }
+}
+
+fn board_reset(gi: usize) {
+    host::store_del(&board_key(gi));
+    let b = board(gi);
+    b.loaded = false;
+    b.sizes.clear();
+    board_load(gi, b);
 }
 
 /// Delete or Escape on a board. True: the board used it.
@@ -323,17 +352,19 @@ fn group_board(gi: usize) -> N {
             .kid(el("svg:path").cls("w-hit").attr("data-stop", "1").attr("data-solid", "1").attr("d", d).on("click", Msg::T(Tool::Grid, 3, format!("{}", i))).kid(el("svg:title").text("A wire: click to select it, then Delete to remove it")));
     }
     // tips
-    let mut tips = el("svg:svg").cls("ports-svg board-ports").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h));
+    let mut tips = el("svg:svg").cls("ports-svg board-ports").cls_if(b.held.is_some(), "holding").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h));
     for i in 0..total {
         for t in 0..4u8 {
             let (x, y) = btip(&b, i, t);
             let held = b.held == Some(i) && t == 1;
             let target = b.held.is_some() && b.held != Some(i) && t != 1;
+            let wired = b.links.iter().any(|l| (l.0 == i && t == 1) || (l.1 == i && l.2 == t));
             tips = tips.kid(
                 el("svg:g")
                     .cls("port")
                     .cls(if t == 1 { "out" } else { "tip" })
                     .cls_if(held, "on")
+                    .cls_if(wired, "wired")
                     .cls_if(target, "target")
                     .attr("data-stop", "1")
                     .attr("data-solid", "1")
@@ -392,7 +423,7 @@ fn group_board(gi: usize) -> N {
         });
     }
     el("div")
-        .kid(head(g.title, "Everything in this super, on its own canvas. Click one to open it; drag to move; wire an out into an in; double click for a sparkle, double right click for a super of your own."))
+        .kid(head(g.title, "Everything in this super, on its own canvas. Click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Supers stay where they are: shift + drag moves one, the middle button resizes it, and the lock frees them all."))
         .kid(
             el("div")
                 .cls("board")
@@ -404,7 +435,7 @@ fn group_board(gi: usize) -> N {
                 .kids(nodes)
                 .kid(tips),
         )
-        .kid(el("div").cls("row board-bar").kid(el("span").cls("hint").text(b.note.clone())).kid(el("button").attr("type", "button").cls("btn small ghost").on("click", Msg::T(Tool::Grid, 7, String::new())).text("Reset this canvas")))
+        .kid(el("div").cls("row board-bar").kid(el("span").cls("hint").text(b.note.clone())))
         .into()
 }
 
