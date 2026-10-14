@@ -364,6 +364,15 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+/* wiring: the pointer says what a click will do (owner, 2026-10-14: "improve the wiring experience with pointer change") */
+.ports-svg .port.out{cursor:crosshair}.ports-svg .port.tip{cursor:help}
+.scene.wiring,.scene.wiring .sx,.board.holding,.board.holding .bnode{cursor:crosshair}
+.scene.wiring .ports-svg .port.target,.board-ports.holding .port.target{cursor:copy}
+.scene.wiring .ports-svg .port.target .mark,.board-ports.holding .port.target .mark{transform-box:fill-box;transform-origin:center;animation:tippulse 1s ease-in-out infinite}
+@keyframes tippulse{50%{transform:scale(1.35)}}
+.scene.wiring .ports-svg .port:not(.target):not(.on),.board-ports.holding .port:not(.target):not(.on){cursor:not-allowed}
+.wires .w-hit:hover+.w,.wires .w-hit:hover{cursor:pointer}
+.board .w-hit:hover{stroke:rgba(37,99,235,.18)}.wires .w-hit:hover{stroke:rgba(37,99,235,.12)}
 .wire-note{position:absolute;left:16px;bottom:14px;z-index:5;padding:7px 12px;background:var(--ink);color:var(--paper);font-size:13px;
 max-width:min(520px,calc(100% - 32px))}
 /* the π canvas, floating on top of an open super */

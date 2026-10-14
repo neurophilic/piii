@@ -15,6 +15,8 @@ pub struct Board {
     sizes: Vec<(f64, f64)>,
     sel: Option<usize>,
     held: Option<usize>,
+    /// where the pointer is while a wire is being made, for the wire that follows it
+    at: Option<(f64, f64)>,
     note: String,
 }
 
@@ -258,6 +260,26 @@ fn board_update(a: u16, v: String) {
         host::capture(true);
         return;
     }
+    if a == 71 {
+        if let Page::Group(g) = st().page {
+            let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+            let b = board(g as usize);
+            if b.held.is_some() && n.len() >= 2 {
+                b.at = Some((n[0], n[1]));
+            }
+        }
+        return;
+    }
+    if a == 70 {
+        let s = st();
+        if let Ok(i) = v.parse::<usize>() {
+            if i < s.results.len() {
+                s.results.remove(i);
+                results_save();
+            }
+        }
+        return;
+    }
     if a == 61 {
         st().win_size = None;
         host::store_del("piii:win");
@@ -300,6 +322,7 @@ fn board_update(a: u16, v: String) {
             match b.held {
                 None if tip == 1 => {
                     b.held = Some(node);
+                    b.at = None;
                     b.note = "Now click a tip of another super: in, control or gate.".into();
                 }
                 None => b.note = "A wire starts at an out (the filled tip on the right).".into(),
@@ -307,6 +330,7 @@ fn board_update(a: u16, v: String) {
                     b.held = None;
                     if tip == 1 {
                         b.held = Some(node);
+                    b.at = None;
                     } else if from == node {
                         b.note = "A super does not wire into itself.".into();
                     } else if board_reaches(b, node, from) {
@@ -401,6 +425,11 @@ fn group_board(gi: usize) -> N {
             .kid(el("svg:path").cls("w").cls(kind).cls_if(b.sel == Some(i), "sel").attr("d", d.clone()).attr("marker-end", if kind == "flow" { "url(#bah-flow)" } else { "url(#bah-ink)" }))
             .kid(el("svg:path").cls("w-hit").attr("data-stop", "1").attr("data-solid", "1").attr("d", d).on("click", Msg::T(Tool::Grid, 3, format!("{}", i))).kid(el("svg:title").text("A wire: click to select it, then Delete to remove it")));
     }
+    // the wire being made follows the pointer
+    if let (Some(h), Some(at)) = (b.held, b.at) {
+        let a = btip(&b, h, 1);
+        wires = wires.kid(el("svg:path").cls("w-temp").attr("d", curve(a, Side::R, at, Side::L)));
+    }
     // tips
     let mut tips = el("svg:svg").cls("ports-svg board-ports").cls_if(b.held.is_some(), "holding").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h));
     for i in 0..total {
@@ -477,6 +506,8 @@ fn group_board(gi: usize) -> N {
         .kid(
             el("div")
                 .cls("board")
+                .cls_if(b.held.is_some(), "holding")
+                .on_if(b.held.is_some(), "mmove", Msg::TV(Tool::Grid, 71))
                 .style(format!("height:{:.0}px;min-width:{:.0}px", h, w))
                 .on("dbl", Msg::TV(Tool::Grid, 4))
                 .on("dbl2", Msg::TV(Tool::Grid, 5))

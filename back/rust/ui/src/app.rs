@@ -456,6 +456,7 @@ pub fn start() {
     s.wallet = host::store_get("sp_wallet").unwrap_or_default();
     s.name = host::store_get("sp_researcher_name").unwrap_or_default();
     *STATE.get() = Some(s);
+    results_load();
     if let Some(v) = host::store_get("piii:win") {
         let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
         if n.len() == 2 {
@@ -1211,6 +1212,7 @@ fn stream_line(line: &str) {
         "result" => {
             let item = v.get("item").clone();
             s.results.insert(0, item);
+            results_save();
         }
         "download_error" => {
             s.log.push((Line::Err, format!("Could not get the paper for {}.", v.any(&["title", "doi"]).str())));
@@ -1286,6 +1288,7 @@ fn update(msg: Msg) {
             s.log.clear();
             s.results.clear();
             s.failed.clear();
+            results_save();
         }
         Msg::Q(v) => s.q = v,
         Msg::Search => load_tab(s.tab),
@@ -1312,7 +1315,11 @@ fn update(msg: Msg) {
             s.name.clear();
             s.piq.reset();
             s.mine.reset();
+            s.rev.claimable.reset();
+            // a new identity: RiBD forgets the previous one's picks, and the free trial is asked again
+            s.studio.selection.clear();
             request(Want::Session, "GET", "/api/auth/session", "", 0);
+            request(Want::Trial, "GET", "/api/trial/status", "", 0);
         }
         Msg::Close(i) => {
             if i < s.open.len() {
@@ -2167,8 +2174,8 @@ fn assess_page(s: &State) -> N {
                 }))),
         );
     }
-    for item in &s.results {
-        col = col.kid(result_card(item));
+    for (i, item) in s.results.iter().enumerate() {
+        col = col.kid(result_card(item, i));
     }
     if !s.failed.is_empty() {
         col = col.kid(
@@ -2259,12 +2266,83 @@ fn find_view(s: &State) -> N {
     v.into()
 }
 
-fn result_card(d: &Value) -> N {
+const RESULTS_KEY: &str = "sp_results";
+const RESULTS_MAX: usize = 40;
+
+/// The results of this browser's assessments survive a reload (app.js persistResults / loadPersistedResults).
+fn results_save() {
+    let s = st();
+    let mut out = String::from("[");
+    for (i, r) in s.results.iter().take(RESULTS_MAX).enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        json::write(r, &mut out);
+    }
+    out.push(']');
+    host::store_set(RESULTS_KEY, &out);
+}
+
+fn results_load() {
+    if let Some(v) = host::store_get(RESULTS_KEY).and_then(|t| json::parse(&t)) {
+        st().results = v.arr().iter().take(RESULTS_MAX).cloned().collect();
+    }
+}
+
+/// Why a paper earned what it earned, in one sentence: the pipeline's own explanation.
+fn reward_explanation(d: &Value) -> String {
+    let em = d.get("emission");
+    let at = em.get("attribution");
+    let minted = d.get("piq").f();
+    if minted > 0.0 {
+        return at.get("reason").text().or_text(&format!("{:.2} piQ minted.", minted));
+    }
+    if d.get("curation").get("awarded").f() > 0.0 {
+        return d.get("curation").get("reason").text();
+    }
+    if !at.get("verified").truthy() {
+        let how = at.get("how_to_verify").text();
+        return format!("{}{}", at.get("reason").text().or_text("Authorship could not be verified."), if how.is_empty() { String::new() } else { format!(" {}", how) });
+    }
+    em.get("reason").text().or_text("This paper did not meet the minting threshold.")
+}
+
+/// The piQ pill: always the total the assessment earned (minted plus held); the word and colour say where it sits.
+fn piq_pill(d: &Value) -> N {
+    let first = |vals: [&Value; 3]| vals.iter().find_map(|v| v.num()).unwrap_or(0.0);
+    let em = d.get("emission");
+    let minted = first([d.get("piq"), d.get("piq_minted"), em.get("minted")]);
+    let held = first([d.get("escrowed"), d.get("piq_escrowed"), em.get("escrowed")]);
+    let total = minted + held;
+    let why = reward_explanation(d);
+    if total <= 0.0 {
+        return el("span").cls("pill").attr("title", format!("No piQ was earned for this assessment. {}", why)).text("piQ 0.00").into();
+    }
+    if held > 0.0 {
+        return el("span")
+            .cls("pill warn")
+            .attr("title", format!("{:.2} piQ earned in total. {:.2} is held until authorship is verified{}. {}", total, held, if minted > 0.0 { format!(", {:.2} is already claimed", minted) } else { String::new() }, why))
+            .text(format!("piQ {:.2} held", total))
+            .into();
+    }
+    el("span").cls("pill good").attr("title", format!("{:.2} piQ earned and claimed to your balance. {}", total, why)).text(format!("piQ {:.2}", total)).into()
+}
+
+fn result_card(d: &Value, idx: usize) -> N {
     let hash = d.any(&["eval_hash", "hash"]).str().to_string();
-    let total = d.get("piq").f() + d.get("escrowed").f();
     let diag = d.get("diagnostics");
+    let mut pills = alloc::vec![piq_pill(d)];
+    pills.extend(paper_pills(d, 0.0));
+    pills.extend(badges(d));
+    if !d.get("reads").is_null() && d.get("reads").f() > 0.0 {
+        pills.push(el("span").cls("pill").attr("title", "How often the paper was opened or downloaded here").text(format!("{} reads", d.get("reads").text())).into());
+    }
     let mut card = el("div")
         .cls("card")
+        .cls_if(d.get("duplicate").truthy(), "dup")
+        .kid_if(d.get("duplicate").truthy(), || {
+            el("div").cls("note").text("Already assessed — this is the existing record for this work, not a second one. Its reviews, publication state and ledger entry are unchanged, and the processing fee was returned.").into()
+        })
         .kid(
             el("div")
                 .cls("res-head")
@@ -2276,7 +2354,7 @@ fn result_card(d: &Value) -> N {
                 )
                 .kid(score_big(d.get("score").f())),
         )
-        .kid(el("div").cls("pills").style("margin-top:12px").kids(paper_pills(d, total)))
+        .kid(el("div").cls("pills").style("margin-top:12px").kids(pills))
         .kid(bars(d));
     if diag.get("available").truthy() {
         let headline = diag.get("headline").str();
@@ -2292,12 +2370,15 @@ fn result_card(d: &Value) -> N {
                 .into()
         }));
     }
+    let mut bar = el("div").cls("row").style("margin-top:16px");
     if !hash.is_empty() {
-        card = card.kid(
-            el("div").style("margin-top:16px").kid(el("a").attr("href", format!("#/paper/{}", hash)).text("Open the full dossier →")),
-        );
+        bar = bar
+            .kid(el("a").cls("btn small primary").attr("href", format!("#/paper/{}", hash)).text("Full report and dossier"))
+            .kid(act_btn("Suggest defense", "defense", &hash, ""))
+            .kid_if(signed_in(st()), || act_btn("Remove", "remove", &hash, "danger"));
     }
-    card.into()
+    bar = bar.kid(el("button").attr("type", "button").cls("btn small ghost").attr("title", "Hide this card. The assessment stays in the ledger.").on("click", Msg::T(Tool::Grid, 70, format!("{}", idx))).text("Dismiss"));
+    card.kid(bar).into()
 }
 
 trait OrDefault {
