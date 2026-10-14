@@ -139,10 +139,17 @@ fn board_snap(b: &Board, from: usize, ftip: u8, at: (f64, f64)) -> Option<(usize
     best.map(|q| (q.1, q.2))
 }
 
+/// Is a super on this canvas an icon, as drawn now: at the page's zoom (owner, 2026-10-14: "the lab should become
+/// written in icons by this size")?
+fn bicon(w: f64, h: f64) -> bool {
+    let z = st().pzoom;
+    icon_area(w * z, h * z)
+}
+
 /// A node a double click shrinks: shown as a canvas (10% of the window or more) and unlocked.
 fn board_shrinkable(b: &Board, i: usize) -> bool {
     let (_, _, w, h) = bnode(b, i);
-    !icon_area(w, h) && b.free.contains(&i)
+    !bicon(w, h) && b.free.contains(&i)
 }
 
 /// Back to an icon, in place: its starting size, or that shape at 8% of the window. Locked again once a canvas.
@@ -151,7 +158,7 @@ fn board_shrink(gi: usize, i: usize) {
     let (_, _, w, h) = bnode(b, i);
     let (gw, gh) = b.sizes.get(i).copied().unwrap_or((0.0, 0.0));
     let (bw, bh) = ((w - gw).max(MIN_SUPER), (h - gh).max(MIN_SUPER));
-    let (nw, nh) = icon_size(bw, bh, 1.0);
+    let (nw, nh) = icon_size(bw, bh, st().pzoom);
     while b.sizes.len() <= i {
         b.sizes.push((0.0, 0.0));
     }
@@ -687,11 +694,11 @@ fn group_board(gi: usize) -> N {
                 .style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh))
                 .on("pdown", Msg::TV(Tool::Grid, 1000 + m as u16))
                 .on("enter", Msg::T(Tool::Grid, 8, format!("{}", m)))
-                .cls_if(icon_area(bw, bh), "icon")
-                .attr_if(icon_area(bw, bh), "title", name.to_string())
-                .kid_if(icon_area(bw, bh), || el("span").cls("icon-g").text(glyph(name)).into())
-                .kid_if(!icon_area(bw, bh), || el("span").cls("tag").text(*name).into())
-                .kid_if(!icon_area(bw, bh) && !note.is_empty(), || el("span").cls("m-note").text(note).into())
+                .cls_if(bicon(bw, bh), "icon")
+                .attr_if(bicon(bw, bh), "title", name.to_string())
+                .kid_if(bicon(bw, bh), || el("span").cls("icon-g").text(glyph(name)).into())
+                .kid_if(!bicon(bw, bh), || el("span").cls("tag").text(*name).into())
+                .kid_if(!bicon(bw, bh) && !note.is_empty(), || el("span").cls("m-note").text(note).into())
                 .into(),
         );
     }
