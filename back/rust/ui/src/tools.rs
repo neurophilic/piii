@@ -30,6 +30,9 @@ pub enum Tool {
     Scim,
     // reviews.rs
     Rev,
+    // owner.rs
+    Bug,
+    Owner,
 }
 
 /// What every tool keeps.
@@ -63,6 +66,8 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Buddy => buddy_view(s),
         Tool::Scim => scim_view(s),
         Tool::Rev => txt(""),
+        Tool::Bug => bug_view(s),
+        Tool::Owner => owner_view(s),
     }
 }
 
@@ -88,6 +93,12 @@ fn tool_load(t: Tool) {
     if t == Tool::Scim {
         scim_load();
     }
+    if t == Tool::Bug {
+        bug_load();
+    }
+    if t == Tool::Owner {
+        owner_load();
+    }
     tools2_load(t);
 }
 
@@ -97,6 +108,8 @@ fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
         put(&mut s.t.md, v, err);
     } else if t == Tool::Rev {
         rev_apply(what, v, err);
+    } else if matches!(t, Tool::Bug | Tool::Owner) {
+        owner_apply(t, what, v, err);
     } else if t == Tool::Scim {
         scim_apply(what, v, err);
     } else if matches!(t, Tool::Profile | Tool::Buddy) {
@@ -122,6 +135,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Profile | Tool::Buddy => studio_update(a, v),
         Tool::Scim => scim_update(a, v),
         Tool::Rev => rev_update(a, v),
+        Tool::Bug | Tool::Owner => owner_update(t, a, v),
         _ => tools2_update(t, a, v),
     }
 }

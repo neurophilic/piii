@@ -505,7 +505,7 @@ const GROUPS: [Group; 5] = [
             ("Research profile", Target::Tool(Tool::Profile)),
             ("piQ held for you", Target::Data("/api/assessments/claimable", "piQ held in escrow until you claim it.")),
             ("Assessment results", Target::Hash("#/assess")),
-            ("Reset platform", Target::Soon("Resetting the platform is for the owner.")),
+            ("Owner console", Target::Tool(Tool::Owner)),
             ("Why sign in", Target::Words(
                 "Signing in with ORCID links your assessments to you: they stay in your history, and the piQ they earn \
                  is minted to you instead of held in escrow. Anonymous visitors have a short free trial.",
@@ -515,7 +515,7 @@ const GROUPS: [Group; 5] = [
                  of each other's papers.",
             )),
             ("Support Pi", Target::Data("/api/donate/info", "How to support the lab.")),
-            ("Contact us", Target::Words("Write to the lab through the issues of its repository on GitHub: github.com/ex-tern/pi.")),
+            ("Contact us", Target::Tool(Tool::Bug)),
             ("GitHub", Target::Url("https://github.com/ex-tern/pi")),
         ],
     },
