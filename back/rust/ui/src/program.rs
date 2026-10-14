@@ -479,6 +479,34 @@ fn compute_order(s: &State, g: &Geo) -> (Vec<usize>, Vec<usize>) {
     (done, stuck)
 }
 
+/// An operation on its own (nothing wired into its in): wired to another node's control or gate, by a wire or a pass,
+/// it is not a value but the operation that node does with what arrives (owner, 2026-10-14: 4 and 3 into a sparkle
+/// whose gate is joined to a "+" give 7).
+fn lone_op(s: &State, id: usize) -> Option<&'static str> {
+    if !is_unode(id) || s.wires.iter().any(|w| w.1 == id && w.2 == Tip::In) {
+        return None;
+    }
+    match node_kind(s, id) {
+        Some(Kind::Op(op)) => Some(op),
+        _ => None,
+    }
+}
+
+/// The operation a node is given through its control or gate, if one is.
+fn operator_of(s: &State, id: usize) -> Option<&'static str> {
+    let side = |t: Tip| matches!(t, Tip::Control | Tip::Gate);
+    let mut cands: Vec<usize> = s.wires.iter().filter(|w| w.1 == id && side(w.2)).map(|w| w.0).collect();
+    for p in &s.passes {
+        if p.2 == id && side(p.3) {
+            cands.push(p.0);
+        }
+        if p.0 == id && side(p.1) {
+            cands.push(p.2);
+        }
+    }
+    cands.into_iter().filter(|c| *c != id).find_map(|c| lone_op(s, c))
+}
+
 fn reg_initial(s: &State, id: usize) -> Value {
     match node_kind(s, id) {
         Some(Kind::Reg(v)) => v,
@@ -498,12 +526,14 @@ fn prog_tick(order: &[usize], g: &Geo, evals: &mut u64) -> bool {
     }
     let mut stop = false;
     // whether a node may run: its control has a value, its gate is true (when they are wired)
+    // an operation joined to a control or gate is what the node does, not a value it waits for
+    let opnodes: Vec<usize> = s.prog.nodes.iter().map(|n| n.id).filter(|i| lone_op(s, *i).is_some()).collect();
     let allowed = |vals: &BTreeMap<usize, Value>, id: usize| -> bool {
-        let ctl = data_in(s, g, id, Tip::Control);
+        let ctl: Vec<usize> = data_in(s, g, id, Tip::Control).into_iter().filter(|c| !opnodes.contains(c)).collect();
         if !ctl.is_empty() && ctl.iter().all(|c| vals.get(c).map(|v| v.is_null()).unwrap_or(true)) {
             return false;
         }
-        let gate = data_in(s, g, id, Tip::Gate);
+        let gate: Vec<usize> = data_in(s, g, id, Tip::Gate).into_iter().filter(|c| !opnodes.contains(c)).collect();
         if !gate.is_empty() && !gate.iter().all(|c| vals.get(c).map(vtruthy).unwrap_or(false)) {
             return false;
         }
@@ -519,7 +549,11 @@ fn prog_tick(order: &[usize], g: &Geo, evals: &mut u64) -> bool {
             Value::Null
         } else if is_unode(id) {
             let k = node_kind(s, id).unwrap_or(Kind::Pick);
-            let v = eval_kind(&k, &ins);
+            // a sparkle (or an empty super) given an operation does it on what arrives, in order down the canvas
+            let v = match (&k, operator_of(s, id)) {
+                (Kind::Pick, Some(op)) => apply_op(op, &ins.iter().filter(|v| !v.is_null()).cloned().collect::<Vec<_>>()),
+                _ => eval_kind(&k, &ins),
+            };
             if k == Kind::Stop && vtruthy(&v) {
                 stop = true;
             }
@@ -966,7 +1000,8 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
                 .prop("value", n.text.clone())
                 .on("input", Msg::TV(Tool::Prog, P_TEXT | a)),
         )
-        .kid_if(!n.text.trim().is_empty(), || el("span").cls("u-val").text(if shown.is_empty() { kind_name(&k).to_string() } else { shown }).into())
+        // an empty super shows what arrives at it, so a result can land in one
+        .kid_if(!n.text.trim().is_empty() || !shown.is_empty(), || el("span").cls("u-val").text(if shown.is_empty() { kind_name(&k).to_string() } else { shown }).into())
         .into()
 }
 
