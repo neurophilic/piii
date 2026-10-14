@@ -42,6 +42,8 @@ pub enum Tool {
     Whitepaper,
     // hal.rs
     Hal,
+    // board.rs: a super's page as a canvas
+    Grid,
 }
 
 /// What every tool keeps.
@@ -83,6 +85,7 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Learn => learn_view(s),
         Tool::Whitepaper => paper_doc_view(),
         Tool::Hal => hal_view(s),
+        Tool::Grid => txt(""),
     }
 }
 
@@ -167,6 +170,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Ledger | Tool::Board | Tool::Donate => ledger_update(t, a, v),
         Tool::Learn => learn_update(a, v),
         Tool::Hal => hal_update(a, v),
+        Tool::Grid => board_update(a, v),
         _ => tools2_update(t, a, v),
     }
 }

@@ -68,14 +68,14 @@ const host = {
       }, k === "mwheel" ? { passive: false } : undefined);
       if (k === "mup") n.addEventListener("pointercancel", (e) => { const r = n.getBoundingClientRect(); send(id, k, (e.clientX - r.left) + "," + (e.clientY - r.top) + "," + r.width + "," + r.height); });
     }
-    else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); send(id, k, e.clientX + "," + e.clientY); } });
+    else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } });
     else if (k === "dbl2") {
       let last = 0;
       n.addEventListener("contextmenu", (e) => {
         if (e.target.closest("[data-solid]")) return;
         e.preventDefault();
         const t = Date.now();
-        if (t - last < 450) { last = 0; send(id, k, e.clientX + "," + e.clientY); } else last = t;
+        if (t - last < 450) { last = 0; const r = n.getBoundingClientRect(); send(id, k, e.clientX + "," + e.clientY + "," + (e.clientX - r.left) + "," + (e.clientY - r.top)); } else last = t;
       });
     }
     // a key typed into something that is not a field (the HAL-OS screen): it goes only there

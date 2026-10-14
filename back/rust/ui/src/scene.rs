@@ -1344,6 +1344,9 @@ pub fn on_key(key: &str) -> bool {
         return map_key(key);
     }
     let s = st();
+    if s.modal.is_none() && board_key_press(key) {
+        return true;
+    }
     match key {
         "Escape" => {
             if s.modal.is_some() {
@@ -1412,6 +1415,9 @@ pub fn float_load() {
 }
 
 pub fn on_pointer(phase: u32, x: f64, y: f64) {
+    if board_pointer(phase, x, y) {
+        return;
+    }
     let s = st();
     if let Some(d) = s.float_drag.as_mut() {
         match phase {

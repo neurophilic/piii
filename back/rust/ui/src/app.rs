@@ -261,6 +261,8 @@ struct State {
     ledger: Ledger,
     learn: Learn,
     hal: Hal,
+    boards: Vec<Board>,
+    board_drag: Option<BoardDrag>,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -292,7 +294,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS, LEARN_CSS, HAL_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS, LEARN_CSS, HAL_CSS, BOARD_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -390,6 +392,8 @@ pub fn start() {
         ledger: Ledger::default(),
         learn: Learn::default(),
         hal: Hal::default(),
+        boards: Vec::new(),
+        board_drag: None,
         prog: Prog::default(),
     };
 
@@ -1405,7 +1409,7 @@ fn view(s: &State) -> N {
             Page::Paper => paper_page(s),
             Page::Live => live_page(s),
             Page::Confirm => confirm_page(s),
-            Page::Group(g) => group_page(g as usize),
+            Page::Group(g) => group_board(g as usize),
             Page::Item(g, m) => item_page(s, g as usize, m as usize),
             Page::Map => map_page(),
             Page::Home => txt(""),
@@ -2844,6 +2848,7 @@ include!("ledger.rs");
 include!("help.rs");
 include!("learn.rs");
 include!("hal.rs");
+include!("board.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {
