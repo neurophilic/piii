@@ -1639,7 +1639,23 @@ fn rail(s: &State) -> N {
             .cls("ric home")
             .attr("href", "#/")
             .attr("aria-label", "Back to the canvas")
-            .kid(el("span").cls("g").text("π"))
+            // π drawn as a line icon, like every other one in the sidebar (owner, 2026-10-14: "make the pi icon same as
+            // other icon")
+            .kid(el("span").cls("g").kid(
+                el("svg:svg")
+                    .attr("viewBox", "0 0 24 24")
+                    .attr("width", "20")
+                    .attr("height", "20")
+                    .attr("fill", "none")
+                    .attr("stroke", "currentColor")
+                    .attr("stroke-width", "1.8")
+                    .attr("stroke-linecap", "round")
+                    .attr("stroke-linejoin", "round")
+                    .attr("aria-hidden", "true")
+                    .kid(el("svg:path").attr("d", "M4.5 7.5c.6-1.6 1.8-2.5 3.5-2.5h11.5"))
+                    .kid(el("svg:path").attr("d", "M9.5 5c0 5.5-.8 10.5-3 14"))
+                    .kid(el("svg:path").attr("d", "M15.5 5c-.4 4.5-.3 9 .6 12.2.4 1.3 1.6 1.8 3.4 1.1")),
+            ))
             .kid(el("span").cls("tip").text("piii lab"))
             .kid(ports()),
     );
@@ -1681,12 +1697,12 @@ fn rail(s: &State) -> N {
         &["M12 3l8 3v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6z", "M12 10.5v3.5"],
     ));
     r = r.kid(foot(
-        el("a").attr("href", "/api/cookies").attr("target", "_blank").attr("rel", "noopener"),
+        el("button").attr("type", "button").on("click", Msg::T(Tool::Ledger, 50, String::new())),
         "Cookies",
         &["M21 12a9 9 0 1 1-9-9 3 3 0 0 0 3 3 3 3 0 0 0 3 3 3 3 0 0 0 3 3z", "M8.5 10.5h.01", "M14 15h.01", "M9 15.5h.01"],
     ));
     r = r.kid(foot(
-        el("a").attr("href", "/docs").attr("target", "_blank").attr("rel", "noopener"),
+        el("button").attr("type", "button").on("click", Msg::T(Tool::Ledger, 51, String::new())),
         "API",
         &["M8 7l-5 5 5 5", "M16 7l5 5-5 5"],
     ));
@@ -2976,7 +2992,6 @@ fn library_page(s: &State) -> N {
                         .cls("list")
                         .kid(link("/ScholarPi_Whitepaper.pdf", "Whitepaper", "The design of the index, the panel and the ledger (PDF)."))
                         .kid(link("/zotero/scholarpi.xpi", "Zotero plugin", "Shows each paper's piX in your Zotero library. Zotero 7: Tools → Plugins → Install from file."))
-                        .kid(link("/docs", "API reference", "Every endpoint, for building on ScholarPi."))
                         .kid(link("/api/cookies", "Cookies and storage", "Everything this site keeps in your browser, and why.")),
                 ),
         )
@@ -3068,7 +3083,7 @@ fn ctl_bar(s: &State) -> N {
         .cls("ctl-bar")
         .attr("role", "toolbar")
         .attr("aria-label", "The canvas's controls")
-        .kids([S_LOCK, S_CHAIN, S_RESET].iter().map(|&id| -> N {
+        .kids([S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR].iter().map(|&id| -> N {
             el("button")
                 .attr("type", "button")
                 .cls("sx ctl")

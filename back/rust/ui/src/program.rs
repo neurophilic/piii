@@ -72,12 +72,17 @@ fn unode(s: &State, id: usize) -> Option<&UNode> {
 }
 
 /// A node's size: wide enough for what is typed in it.
+/// The size a sparkle or a super takes when made: one size for both (owner, 2026-10-14: "double clicking creates a
+/// sparkle. Make it bigger. And right clicking makes a super. Make it same size as the sparkle. Uniform."). A super
+/// only widens when what is typed in it needs the room.
+const MADE: f64 = 88.0;
+
 fn unode_size(text: &str) -> (f64, f64) {
     if text == SPARKLE {
-        return (64.0, 64.0);
+        return (MADE, MADE);
     }
-    let w = (text.chars().count() as f64 * 9.2 + 34.0).clamp(96.0, 320.0);
-    (w, 58.0)
+    let w = (text.chars().count() as f64 * 9.2 + 34.0).clamp(MADE, 320.0);
+    (w, MADE)
 }
 
 // ---------------------------------------------------------------------------------------------- what a node does
@@ -894,11 +899,11 @@ fn sparkle_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         .on_if(!mini, "pdown", Msg::PDown(n.id, String::new()))
         .kid(
             el("svg:svg")
-                .attr("viewBox", "-17 -17 34 34")
-                .attr("width", "34")
-                .attr("height", "34")
+                .attr("viewBox", "-30 -30 60 60")
+                .attr("width", "60")
+                .attr("height", "60")
                 .attr("aria-hidden", "true")
-                .kid(el("svg:path").attr("d", star(0.0, 0.0, 14.0))),
+                .kid(el("svg:path").attr("d", star(0.0, 0.0, 26.0))),
         )
         .kid_if(!v.is_empty(), || el("span").cls("sp-val").text(v.clone()).into())
         .into()
@@ -925,6 +930,7 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         .cls(kcls)
         .cls_if(s.prog.sel == Some(n.id), "sel")
         .cls_if(!shown.is_empty(), "has-val")
+        .cls_if(n.text.trim().is_empty(), "empty")
         .attr("data-s", format!("{}", n.id))
         .attr("data-solid", "1")
         .attr("title", format!("{}: {}", kind_name(&k), n.text))
@@ -939,7 +945,7 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
                 .prop("value", n.text.clone())
                 .on("input", Msg::TV(Tool::Prog, P_TEXT | a)),
         )
-        .kid(el("span").cls("u-val").text(if shown.is_empty() { kind_name(&k).to_string() } else { shown }))
+        .kid_if(!n.text.trim().is_empty(), || el("span").cls("u-val").text(if shown.is_empty() { kind_name(&k).to_string() } else { shown }).into())
         .into()
 }
 
@@ -1002,6 +1008,7 @@ const PROG_CSS: &str = "\
 .sp-val{position:absolute;top:100%;left:50%;transform:translateX(-50%);font-size:11.5px;color:var(--magenta);font-weight:600;white-space:nowrap}\
 .sx.unode.sel{outline:2px solid var(--accent);outline-offset:3px}\
 .u-text{font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;border:0;background:transparent;width:100%;padding:0;color:var(--ink);text-align:center;outline:none;cursor:text}\
+.sx.unode.empty .u-text{border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px}.sx.unode.empty .u-text:focus{border-color:var(--accent)}\
 .u-val{font-size:11.5px;color:var(--faint);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}\
 .unode.has-val .u-val{color:var(--magenta);font-weight:600;font-size:12.5px}\
 .unode.k-reg{border-color:var(--accent);border-width:2px}.unode.k-reg .u-val{color:var(--accent)}\
@@ -1014,7 +1021,7 @@ const PROG_CSS: &str = "\
 .chip:hover,.ex:hover{border-color:var(--accent);color:var(--accent)}\
 .ex-list{display:flex;flex-direction:column;gap:5px}\
 .ex{font:inherit;font-size:13.5px;text-align:left;border:1px solid #2b2b2b;background:#fbfbf9;padding:4px 10px;cursor:pointer}\
-.ctl-bar{position:fixed;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:30px;z-index:2147483000}\
+.ctl-bar{position:fixed;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:12px;z-index:2147483000}\
 .ctl-bar .sx{position:relative;width:46px;height:44px}\
-@media (max-width:699px){.ctl-bar{top:auto;bottom:80px;gap:22px}}\
+@media (max-width:699px){.ctl-bar{top:auto;bottom:80px;gap:10px}}\
 ";

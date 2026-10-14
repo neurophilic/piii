@@ -384,7 +384,8 @@ fn locked(s: &State, id: usize) -> bool {
 /// A super under this share of the window's area, as drawn now, is an icon; at or over it, a canvas (owner,
 /// 2026-10-14: "if a super is less than 10% of the screen size, then it's icon. If it's more than 10%, it's a canvas").
 /// An icon is drawn as one and is never locked; it changes as the canvas zooms or the super is resized.
-const ICON_SHARE: f64 = 0.10;
+// then 5% (owner, 2026-10-14: "make the 10% rule of screen to 5% of the screen size it is shown on")
+const ICON_SHARE: f64 = 0.05;
 
 /// The smallest a super gets, in design units (a speck, but never nothing: the canvas zooms in without end to find it).
 const MIN_SUPER: f64 = 0.5;
@@ -407,6 +408,40 @@ fn is_icon(s: &State, id: usize) -> bool {
     let g = geo(s);
     let (_, _, w, h) = rect(&g, id);
     w > 0.0 && icon_area(w * g.k, h * g.k)
+}
+
+/// A super on the main canvas that a double click shrinks: shown as a canvas, and unlocked (owner, 2026-10-14: "if a
+/// super is unlocked, double clicking it on its canvas will close it", to an icon).
+fn shrinkable(s: &State, id: usize) -> bool {
+    id < NSUP && icon_kind(id) && !is_icon(s, id) && s.free.contains(&id)
+}
+
+/// The share of the window an icon is shrunk to when its starting size is itself a canvas.
+const SHRUNK_SHARE: f64 = 0.04;
+
+/// The size (w, h) a box of base size (bw, bh), drawn at scale k, takes as an icon: its starting size when that is
+/// an icon, else that shape at 4% of the window.
+fn icon_size(bw: f64, bh: f64, k: f64) -> (f64, f64) {
+    let (vw, vh) = (host::vw(), host::vh());
+    let area = bw * bh * k * k;
+    if area < ICON_SHARE * vw * vh {
+        (bw, bh)
+    } else {
+        let f = (SHRUNK_SHARE * vw * vh / area).sqrt_c();
+        (bw * f, bh * f)
+    }
+}
+
+fn shrink_to_icon(id: usize) {
+    let s = st();
+    let (b, _, _) = base(host::vw() < 700.0);
+    let (bw, bh) = (b[id].2, b[id].3);
+    let (w, h) = icon_size(bw, bh, geo(s).k);
+    s.sizes[id] = (w - bw, h - bh);
+    // an icon is never locked; grown into a canvas again, it starts locked
+    s.free.retain(|x| *x != id);
+    layout_save();
+    note(format!("{} is an icon again", name_of(id)));
 }
 
 /// The icon a small super is drawn as: its line drawing when it has one, else its name's initials.
@@ -473,7 +508,7 @@ fn lock_toggle() {
             let b = board(gi);
             let (_, _, w, h) = bnode(b, n);
             if icon_area(w, h) {
-                note("An icon is never locked; at 10% of the window or more it is a canvas, and the lock holds it".to_string());
+                note("An icon is never locked; at 5% of the window or more it is a canvas, and the lock holds it".to_string());
                 return;
             }
             let open = flip(&mut b.free, n);
@@ -503,7 +538,7 @@ fn lock_toggle() {
         }
     };
     if is_icon(s, id) {
-        note(format!("{} is an icon, and icons are never locked; at 10% of the window or more it is a canvas, and the lock holds it", name_of(id)));
+        note(format!("{} is an icon, and icons are never locked; at 5% of the window or more it is a canvas, and the lock holds it", name_of(id)));
         return;
     }
     let open = flip(&mut s.free, id);
@@ -695,9 +730,10 @@ fn geo(s: &State) -> Geo {
 fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
     let (bw, bh) = (46.0, 44.0);
     let narrow = vw < 700.0;
-    let gap = if narrow { 22.0 } else { 30.0 };
+    let gap = if narrow { 10.0 } else { 12.0 };
     let top = if narrow { vh - 80.0 - bh } else { 10.0 };
-    let left = vw / 2.0 - (3.0 * bw + 2.0 * gap) / 2.0 + i as f64 * (bw + gap);
+    // five buttons: lock, chain, reset, play, stop
+    let left = vw / 2.0 - (5.0 * bw + 4.0 * gap) / 2.0 + i as f64 * (bw + gap);
     (left, top, bw, bh)
 }
 
@@ -885,7 +921,7 @@ fn sup_label(id: usize) -> &'static str {
         S_EXAMPLES => "Examples",
         S_RUN => "Run the program",
         S_STEP => "One step",
-        S_CLEAR => "Clear the values",
+        S_CLEAR => "Stop: clear the values",
         S_SAVE => "Save the layout",
         S_LOCK => "Lock: every canvas stays where it is, at its size; select one, then click here to unlock it (or lock it again)",
         S_CHAIN => "Chain: a holder brings what it holds",
@@ -1733,7 +1769,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 let (b, _, _) = base(host::vw() < 700.0);
                 let (bw, bh) = (b[d.id].2, b[d.id].3);
                 // no limit either way (owner, 2026-10-14: "a super can get infinitely bigger or infinitely smaller"): it only
-                // stays above nothing, so it can still be found by zooming in; under 10% of the window it is an icon
+                // stays above nothing, so it can still be found by zooming in; under 5% of the window it is an icon
                 let (w, h) = ((bw + d.size0.0 + dx).max(MIN_SUPER), (bh + d.size0.1 + dy).max(MIN_SUPER));
                 s.sizes[d.id] = (w - bw, h - bh);
                 s.dirty = true;
@@ -1764,7 +1800,11 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             } else if !d.moved {
                 // anything else opens on a double click
                 let now = host::now();
-                if s.last_tap.0 == d.id && s.last_tap.1 == d.member && now - s.last_tap.2 < 450.0 {
+                if s.last_tap.0 == d.id && s.last_tap.1 == d.member && now - s.last_tap.2 < 450.0 && d.member.is_none() && shrinkable(s, d.id) {
+                    // an unlocked canvas, double clicked: back to an icon, in place (owner, 2026-10-14)
+                    s.last_tap = (usize::MAX, None, 0.0);
+                    shrink_to_icon(d.id);
+                } else if s.last_tap.0 == d.id && s.last_tap.1 == d.member && now - s.last_tap.2 < 450.0 {
                     s.last_tap = (usize::MAX, None, 0.0);
                     s.peek_next = true;
                     activate(d.id, d.member);

@@ -56,6 +56,18 @@ enum Eth {
 }
 
 const ETH_TOKEN: u32 = 3_000_000;
+const API_GUIDE: &str = "Everything the site shows comes from a public JSON API on this same address. Read endpoints need no key.\n\n\
+• GET /api/rubric: the eight piX criteria and every weight\n\
+• GET /api/explorer/latest: the newest blocks on the Proof-of-Research ledger\n\
+• GET /api/explorer/search?q=: search assessed papers\n\
+• GET /api/explorer/dossier/{hash}: one assessment in full\n\
+• GET /api/dossier/{hash}/fair: that assessment as FAIR JSON\n\
+• GET /api/analytics/top-papers and /api/analytics/leaderboard: the two leaderboards\n\
+• GET /api/chain/status: the chain and the contracts\n\
+• GET /api/emission: how much piQ an assessment earns now\n\
+• GET /api/cookies: what the site keeps in your browser\n\
+• GET /api/health: whether the server is up\n\n\
+Writing (assessing a paper, reviewing, your profile) needs a signed-in session: sign in on the site, then send its token as Authorization: Bearer <token>.";
 const EX_PAGE: usize = 20;
 const LB_PAGE: usize = 10;
 const SEPOLIA: &str = "{\"chainId\":\"0xaa36a7\",\"chainName\":\"Sepolia Test Network\",\"nativeCurrency\":{\"name\":\"Sepolia Ether\",\"symbol\":\"SepoliaETH\",\"decimals\":18},\"rpcUrls\":[\"https://ethereum-sepolia-rpc.publicnode.com\",\"https://rpc.sepolia.org\"],\"blockExplorerUrls\":[\"https://sepolia.etherscan.io\"]}";
@@ -218,6 +230,26 @@ fn ledger_apply(t: Tool, w: u8, v: Value, err: Option<String>) {
                 None => l.wmsg = v.get("detail").text().or_text("Signature verification failed, so you are not signed in."),
             }
         }
+        (Tool::Ledger, 6) => {
+            if let Some(e) = err {
+                open_modal(Modal::Info("Cookies and storage".into(), format!("The list could not be loaded. {}", e)));
+                return;
+            }
+            let mut text = String::from("What this site keeps in your browser, and why. Nothing optional is kept before you choose.\n");
+            for (head, key) in [("Cookies", "cookies"), ("Browser storage", "storage")] {
+                text.push_str(&format!("\n{}\n", head));
+                for c in v.get(key).arr() {
+                    text.push_str(&format!(
+                        "\n• {}{}\n  {}\n  Lasts: {}\n",
+                        c.get("name").text(),
+                        if c.get("essential").truthy() { " (essential)" } else { "" },
+                        c.get("purpose").text(),
+                        c.get("lasts").text()
+                    ));
+                }
+            }
+            open_modal(Modal::Info("Cookies and storage".into(), text));
+        }
         (Tool::Ledger, 5) => {
             let msg = v.get("message").text();
             if err.is_some() || msg.is_empty() {
@@ -241,7 +273,10 @@ fn ledger_update(t: Tool, a: u16, v: String) {
     let s = st();
     let l = &mut s.ledger;
     match (t, a) {
-        (Tool::Ledger, 1) => l.ex_q = v,
+        // the sidebar's cookies icon: what this site keeps in your browser, read from the server, shown here
+        (Tool::Ledger, 50) => request(Want::Tool(Tool::Ledger, 6), "GET", "/api/cookies", "", 0),
+        // the sidebar's API icon: the public endpoints (the interactive reference is off on the live site)
+        (Tool::Ledger, 51) => open_modal(Modal::Info("The API".into(), API_GUIDE.into())),
         (Tool::Ledger, 2) => ex_fetch(),
         (Tool::Ledger, 3) => l.ex_min = v,
         (Tool::Ledger, 4) => {

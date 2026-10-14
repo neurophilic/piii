@@ -42,9 +42,9 @@ const BH: f64 = 104.0;
 const BGAP_X: f64 = 44.0;
 const BGAP_Y: f64 = 48.0;
 const BCOLS: usize = 4;
-const SPARK: f64 = 44.0;
-const USW: f64 = 190.0;
-const USH: f64 = 64.0;
+const SPARK: f64 = 88.0;
+const USW: f64 = 88.0;
+const USH: f64 = 88.0;
 
 fn board_key(gi: usize) -> String {
     format!("piii:board:{}", gi)
@@ -113,10 +113,32 @@ fn board_save(gi: usize) {
     host::store_set(&board_key(gi), &format!("{{\"pos\":[{}],\"extra\":[{}],\"links\":[{}],\"sizes\":[{}],\"free\":[{}]}}", pos.join(","), extra.join(","), links.join(","), sizes.join(","), free.join(",")));
 }
 
-/// Unlocked by the lock, or an icon (under 10% of the window), which is never locked.
+/// Unlocked by the lock, or an icon (under 5% of the window), which is never locked.
 fn bnode_free(b: &Board, i: usize) -> bool {
     let (_, _, w, h) = bnode(b, i);
     b.free.contains(&i) || icon_area(w, h)
+}
+
+/// A node a double click shrinks: shown as a canvas (5% of the window or more) and unlocked.
+fn board_shrinkable(b: &Board, i: usize) -> bool {
+    let (_, _, w, h) = bnode(b, i);
+    !icon_area(w, h) && b.free.contains(&i)
+}
+
+/// Back to an icon, in place: its starting size, or that shape at 4% of the window. Locked again once a canvas.
+fn board_shrink(gi: usize, i: usize) {
+    let b = board(gi);
+    let (_, _, w, h) = bnode(b, i);
+    let (gw, gh) = b.sizes.get(i).copied().unwrap_or((0.0, 0.0));
+    let (bw, bh) = ((w - gw).max(MIN_SUPER), (h - gh).max(MIN_SUPER));
+    let (nw, nh) = icon_size(bw, bh, 1.0);
+    while b.sizes.len() <= i {
+        b.sizes.push((0.0, 0.0));
+    }
+    b.sizes[i] = (nw - bw, nh - bh);
+    b.free.retain(|x| *x != i);
+    board_save(gi);
+    note("An icon again".to_string());
 }
 
 /// A node's box on the board: a member, a sparkle or a super of your own.
@@ -132,7 +154,7 @@ fn bnode(b: &Board, i: usize) -> (f64, f64, f64, f64) {
             None => return (0.0, 0.0, 0.0, 0.0),
         }
     };
-    // no limit either way, as on the main canvas; under 10% of the window it is an icon
+    // no limit either way, as on the main canvas; under 5% of the window it is an icon
     (x, y, (w + gw).max(MIN_SUPER), (h + gh).max(MIN_SUPER))
 }
 
@@ -243,6 +265,15 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             if moved {
                 board_save(gi);
             } else if phase == 1 && how != 2 && node >= board(gi).pos.len() {
+                // a super of your own: a double click shrinks it when it is an unlocked canvas; a click selects it
+                let now = host::now();
+                let s = st();
+                if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 && board_shrinkable(board(gi), node) {
+                    s.last_tap = (usize::MAX, None, 0.0);
+                    board_shrink(gi, node);
+                } else {
+                    s.last_tap = (10_000 + node, None, now);
+                }
                 board(gi).picked = Some(node);
                 let s = st();
                 s.float_pick = false;
@@ -251,7 +282,11 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
                 // a double click opens the member, as everywhere
                 let now = host::now();
                 let s = st();
-                if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 {
+                if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 && board_shrinkable(board(gi), node) {
+                    // an unlocked canvas, double clicked: back to an icon, in place (owner, 2026-10-14)
+                    s.last_tap = (usize::MAX, None, 0.0);
+                    board_shrink(gi, node);
+                } else if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 {
                     s.last_tap = (usize::MAX, None, 0.0);
                     s.peek_next = s.peek;
                     board_open(gi, node);
@@ -545,13 +580,12 @@ fn group_board(gi: usize) -> N {
         let (x, y, bw, bh) = bnode(&b, i);
         let base = el("div").cls("bnode").cls_if(b.picked == Some(i), "picked").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
         nodes.push(if *kind == 0 {
-            base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-22 -22 44 44").attr("width", "44").attr("height", "44").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 18.0)))).into()
+            base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-30 -30 60 60").attr("width", "60").attr("height", "60").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 26.0)))).into()
         } else {
             base.cls("buser").kid(
                 el("input")
                     .cls("buser-in")
                     .attr("type", "text")
-                    .attr("placeholder", "Type a name")
                     .attr("aria-label", "This super's name")
                     .attr("data-stop", "1")
                     .prop("value", label.clone())
@@ -567,7 +601,8 @@ fn group_board(gi: usize) -> N {
                 .cls("board")
                 .cls_if(b.held.is_some(), "holding")
                 .on_if(b.held.is_some(), "mmove", Msg::TV(Tool::Grid, 71))
-                .style(format!("height:{:.0}px;min-width:{:.0}px", h, w))
+                // the whole window below the heading is the canvas: a double click anywhere in it makes a sparkle
+                .style(format!("height:{:.0}px;min-height:calc(100vh - 290px);min-width:{:.0}px", h, w))
                 .on("dbl", Msg::TV(Tool::Grid, 4))
                 .on("dbl2", Msg::TV(Tool::Grid, 5))
                 .on("click", Msg::T(Tool::Grid, 3, "-1".into()))
@@ -586,7 +621,7 @@ const BOARD_CSS: &str = "\
 .board .bnode.member{min-height:0}\
 .board .board-ports{position:absolute;left:0;top:0;z-index:4;overflow:visible;pointer-events:none}\
 .board .bspark svg path{fill:var(--paper);stroke:var(--ink);stroke-width:1.6}\
-.board .buser{display:flex;align-items:center;padding:10px 14px;background:#fff;border:1.6px solid var(--ink);border-radius:18px}\
-.board .buser-in{width:100%;border:none;background:none;font:inherit;font-size:15px;outline:none;cursor:text}\
+.board .buser{display:flex;align-items:center;padding:8px;background:#fff;border:1.6px solid var(--ink);border-radius:18px}\
+.board .buser-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:inherit;font-size:15px;text-align:center;outline:none;cursor:text}.board .buser-in:focus{border-color:var(--accent)}\
 .board-bar{margin-top:10px;justify-content:space-between}\
 ";
