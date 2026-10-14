@@ -475,7 +475,9 @@ fn icon_view(id: usize) -> N {
     let name = sup_label(id);
     let mark = match group_of(id) {
         Some(gi) => mark_of(Page::Group(gi as u8), name),
-        None => txt(glyph(name)),
+        // the supers pinned under the bar and the sidebar have icons of their own there
+        None if rail_pin(id).is_some() || on_bar(id) || is_gone(id) => txt(glyph(name)),
+        None => ai_mark(name),
     };
     el("span").cls("icon-g").kid(mark).into()
 }

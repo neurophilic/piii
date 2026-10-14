@@ -132,6 +132,7 @@ enum Want {
     Gate,
     Item(u8, u8),
     Tool(Tool, u8),
+    Icons,
 }
 
 /// Something fetched: nothing yet, on its way, here, or failed.
@@ -289,6 +290,15 @@ struct State {
     undo_at: f64,
     /// when the last press on the canvas was let go (its click comes after)
     drag_end_at: f64,
+    /// icons Super AI drew from supers' names, kept in this browser too
+    ai_icons: BTreeMap<String, Vec<String>>,
+    /// names whose icon could not be drawn this visit: they keep their initials
+    icon_failed: Vec<String>,
+    /// names shown as icons that have no drawing yet
+    icon_want: Vec<String>,
+    icon_busy: bool,
+    icon_sent: Vec<String>,
+    icons_loaded: bool,
     /// sparkles (0) and supers (1) drawn on pages, by the page's address: kind, x, y, label
     layers: BTreeMap<String, Vec<(u8, f64, f64, String)>>,
     /// where the open window has been moved to (px from its place), once unlocked
@@ -462,6 +472,12 @@ pub fn start() {
         undo: Vec::new(),
         undo_at: 0.0,
         drag_end_at: 0.0,
+        ai_icons: BTreeMap::new(),
+        icon_failed: Vec::new(),
+        icon_want: Vec::new(),
+        icon_busy: false,
+        icon_sent: Vec::new(),
+        icons_loaded: false,
         layers: BTreeMap::new(),
         win_off: (0.0, 0.0),
         pan_drag: None,
@@ -811,6 +827,7 @@ fn render() {
     if let Some(d) = DOM.get().as_mut() {
         d.render(view);
     }
+    icons_flush();
     hal_paint();
     let s = st();
     let t = match s.page {
@@ -1273,6 +1290,7 @@ fn apply(want: Want, v: Value, err: Option<String>) {
             }
         }
         Want::Tool(t, w) => tool_apply(t, w, v, err),
+        Want::Icons => icons_apply(v, err),
     }
 }
 
@@ -1792,10 +1810,110 @@ fn is_current(s: &State, page: Page, arg: &str) -> bool {
 }
 
 /// A super's icon: a line drawing for each kind; a paper shows its title's initials, so several can be told apart.
+// ---------------------------------------------------------------------------------------------- icons by Super AI
+
+/// The icon of a super shrunk to one: Super AI draws it from the super's name (owner, 2026-10-14: "icons are generated
+/// by Super AI"); until the drawing arrives, or if it cannot be made, the name's initials.
+fn ai_mark(name: &str) -> N {
+    icons_load();
+    let s = st();
+    if let Some(paths) = s.ai_icons.get(name) {
+        return el("svg:svg")
+            .cls("ai-icon")
+            .attr("viewBox", "0 0 24 24")
+            .attr("width", "20")
+            .attr("height", "20")
+            .attr("fill", "none")
+            .attr("stroke", "currentColor")
+            .attr("stroke-width", "1.8")
+            .attr("stroke-linecap", "round")
+            .attr("stroke-linejoin", "round")
+            .attr("aria-hidden", "true")
+            .kids(paths.iter().map(|d| -> N { el("svg:path").attr("d", d.clone()).into() }))
+            .into();
+    }
+    if !name.trim().is_empty() && !s.icon_failed.iter().any(|n| n == name) && !s.icon_want.iter().any(|n| n == name) {
+        s.icon_want.push(name.to_string());
+    }
+    txt(glyph(name))
+}
+
+/// Path data made only of the characters a path is drawn with (the server checks too; this is the page's own check).
+fn plain_path(d: &str) -> bool {
+    !d.is_empty() && d.len() <= 400 && d.starts_with(['M', 'm']) && d.chars().all(|c| "MmLlHhVvCcSsQqTtAaZz0123456789.,- ".contains(c))
+}
+
+fn icons_load() {
+    let s = st();
+    if s.icons_loaded {
+        return;
+    }
+    s.icons_loaded = true;
+    let Some(v) = host::store_get("piii:icons") else { return };
+    for line in v.lines() {
+        if let Some((name, rest)) = line.split_once('\t') {
+            let paths: Vec<String> = rest.split('\u{1f}').filter(|d| plain_path(d)).map(|d| d.to_string()).collect();
+            if !paths.is_empty() {
+                s.ai_icons.insert(name.to_string(), paths);
+            }
+        }
+    }
+}
+
+fn icons_save() {
+    let out: String = st().ai_icons.iter().map(|(n, p)| format!("{}\t{}\n", n.replace(['\t', '\n'], " "), p.join("\u{1f}"))).collect();
+    host::store_set("piii:icons", &out);
+}
+
+/// After a render: ask Super AI for the icons that are showing without a drawing, a few at a time.
+fn icons_flush() {
+    let s = st();
+    if s.icon_busy || s.icon_want.is_empty() {
+        return;
+    }
+    let names: Vec<String> = s.icon_want.iter().take(24).cloned().collect();
+    s.icon_busy = true;
+    s.icon_sent = names.clone();
+    let body = format!("{{\"names\":[{}]}}", names.iter().map(|n| json::quote(n)).collect::<Vec<_>>().join(","));
+    request(Want::Icons, "POST", "/api/super/icons", &body, 0);
+}
+
+fn icons_apply(v: Value, err: Option<String>) {
+    let s = st();
+    s.icon_busy = false;
+    let sent = core::mem::take(&mut s.icon_sent);
+    if err.is_some() {
+        // no drawing this visit (too many asked, or the server said no): initials, and no asking again
+        s.icon_want.retain(|n| !sent.contains(n));
+        s.icon_failed.extend(sent);
+        return;
+    }
+    let mut got = false;
+    for (name, paths) in v.get("icons").entries() {
+        let p: Vec<String> = paths.arr().iter().map(|d| d.str().to_string()).filter(|d| plain_path(d)).collect();
+        if !p.is_empty() {
+            s.ai_icons.insert(name.clone(), p);
+            got = true;
+        }
+        s.icon_want.retain(|n| n != name);
+    }
+    for f in v.get("failed").arr() {
+        let f = f.str().to_string();
+        s.icon_want.retain(|n| *n != f);
+        s.icon_failed.push(f);
+    }
+    // what the server will draw next time stays wanted; anything it did not mention is let go
+    let pending: Vec<String> = v.get("pending").arr().iter().map(|x| x.str().to_string()).collect();
+    s.icon_want.retain(|n| pending.contains(n) || !sent.contains(n));
+    if got {
+        icons_save();
+    }
+}
+
 fn mark_of(page: Page, name: &str) -> N {
     let d: &[&str] = match page {
         Page::Home => return txt("π"),
-        Page::Paper | Page::Item(_, _) => return txt(glyph(name)),
+        Page::Paper | Page::Item(_, _) => return ai_mark(name),
         Page::Group(g) => match GROUPS.get(g as usize).map(|x| x.sup).unwrap_or(0) {
             S_TOOLS => &["M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"],
             S_EXPLORE => &["M10.5 4a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13z", "M20 20l-4.8-4.8"],

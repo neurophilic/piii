@@ -765,7 +765,7 @@ fn group_board(gi: usize) -> N {
                 .on("enter", Msg::T(Tool::Grid, 8, format!("{}", m)))
                 .cls_if(bicon(bw, bh), "icon")
                 .attr_if(bicon(bw, bh), "title", name.to_string())
-                .kid_if(bicon(bw, bh), || el("span").cls("icon-g").text(glyph(name)).into())
+                .kid_if(bicon(bw, bh), || el("span").cls("icon-g").kid(ai_mark(name)).into())
                 .kid_if(!bicon(bw, bh), || el("span").cls("tag").text(*name).into())
                 .kid_if(!bicon(bw, bh) && !note.is_empty(), || el("span").cls("m-note").text(note).into())
                 .into(),

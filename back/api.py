@@ -27101,6 +27101,126 @@ app.include_router(super_engine_build_router(
 
 
 # ---------------------------------------------------------------------------
+# Super AI icons: when a super shrinks to an icon, Super AI draws its icon from its name (owner, 2026-10-14). The
+# judge model is asked for a small line drawing as SVG path data only; the paths are checked character by character
+# and the page builds the <svg> itself, so nothing the model writes is ever run or inserted as markup. Icons are kept
+# on disk, so each name is drawn once for every visitor.
+# ---------------------------------------------------------------------------
+ICON_NAME_MAX = 48
+ICON_MAX_PATHS = 6
+ICON_PATH_MAX = 400
+ICON_NEW_PER_REQUEST = 3
+_ICON_PATH_RE = re.compile(r"^[MmLlHhVvCcSsQqTtAaZz0-9.,\-\s]+$")
+_ICON_LOCK = threading.Lock()
+
+
+def icon_name(raw) -> str:
+    """A super's name as the icon key: printable, single-spaced, at most 48 characters."""
+    name = " ".join("".join(ch for ch in str(raw or "") if ch.isprintable()).split())
+    return name[:ICON_NAME_MAX]
+
+
+def icon_paths(reply) -> Optional[List[str]]:
+    """The paths of a model's icon reply, or None when they are not plain path data in a 24 x 24 box."""
+    paths = reply.get("paths") if isinstance(reply, dict) else None
+    if not isinstance(paths, list) or not paths:
+        return None
+    out = []
+    for d in paths[:ICON_MAX_PATHS]:
+        d = " ".join(str(d or "").split())
+        if not d or len(d) > ICON_PATH_MAX or not _ICON_PATH_RE.match(d) or d[0] not in "Mm":
+            return None
+        nums = [float(x) for x in re.findall(r"-?\d*\.?\d+", d)]
+        if any(abs(v) > 48 for v in nums):
+            return None
+        out.append(d)
+    return out
+
+
+def icon_prompt(name: str) -> str:
+    return ("Draw a simple, recognisable line icon for a button labelled " + json.dumps(name) + ". "
+            "Use a 24 x 24 grid, stroke only (no fill), in the style of Lucide or Feather icons: one to five SVG "
+            "paths with absolute commands (M, L, H, V, C, Q, A, Z) and coordinates between 2 and 22. "
+            'Reply with JSON only: {"paths": ["M...", "..."]}')
+
+
+def _icons_file() -> str:
+    return os.path.join(BASE_DIR, "super_icons.json")
+
+
+def icons_load() -> Dict[str, List[str]]:
+    try:
+        with open(_icons_file(), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return {k: v for k, v in data.items() if isinstance(k, str) and icon_paths({"paths": v})}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def icons_store(name: str, paths: List[str]) -> None:
+    with _ICON_LOCK:
+        data = icons_load()
+        data[name] = paths
+        tmp = _icons_file() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        os.replace(tmp, _icons_file())
+
+
+def super_icons_build_router(draw: Callable[[str], Optional[List[str]]], rate_limit: Callable[[Request], None],
+                             load: Callable[[], Dict[str, List[str]]] = icons_load,
+                             store: Callable[[str, List[str]], None] = icons_store,
+                             allowed: Callable[[Request], bool] = lambda r: True) -> APIRouter:
+    router = APIRouter(prefix="/api/super", tags=["super"])
+
+    @router.post("/icons")
+    def icons(body: Dict[str, Any], request: Request):
+        names = []
+        for raw in (body.get("names") or [])[:24] if isinstance(body, dict) else []:
+            n = icon_name(raw)
+            if n and n not in names:
+                names.append(n)
+        have = load()
+        out = {n: have[n] for n in names if n in have}
+        missing = [n for n in names if n not in out]
+        failed: List[str] = []
+        if missing and not allowed(request):
+            return {"icons": out, "pending": [], "failed": missing}
+        todo = missing[:ICON_NEW_PER_REQUEST]
+        if todo:
+            rate_limit(request)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(todo)) as pool:
+                drawn = list(pool.map(lambda n: (n, draw(n)), todo))
+            for n, paths in drawn:
+                if paths:
+                    out[n] = paths
+                    try:
+                        store(n, paths)
+                    except OSError as e:
+                        logging.warning("Super icons: could not keep %r: %s", n, e)
+                else:
+                    failed.append(n)
+        return {"icons": out, "pending": missing[ICON_NEW_PER_REQUEST:], "failed": failed}
+
+    return router
+
+
+def _super_draw_icon(name: str) -> Optional[List[str]]:
+    try:
+        return icon_paths(_super_judge(icon_prompt(name)) or {})
+    except Exception as e:                               # noqa: BLE001 -- a failed drawing leaves the initials
+        logging.warning("Super icons: drawing %r failed: %s", name, e)
+        return None
+
+
+app.include_router(super_icons_build_router(
+    draw=_super_draw_icon,
+    rate_limit=lambda request: check_rate_limit(get_client_ip(request), bucket="sp-icons"),
+    # the judge is an outside model: not for a visitor who said no to outside providers
+    allowed=lambda request: not declined(request, "ext")))
+
+
+# ---------------------------------------------------------------------------
 # 9. Serve the frontend (single-page static app)
 # ---------------------------------------------------------------------------
 _FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "front")
