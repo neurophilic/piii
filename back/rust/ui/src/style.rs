@@ -350,6 +350,8 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .bar .fill{background:var(--accent);border-radius:0}.bar .track{border-radius:0}
 .consent{border-radius:0;border:1.5px solid #2b2b2b}
 @media (max-width:699px){.scene .foot{display:none}}
+/* no "open" dot on icons (owner, 2026-10-14) */
+.ric.open::after,.super.open::after{content:none!important;display:none!important}
 /* wiring */
 .wires .w-hit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
 .wires .w.sel{stroke:var(--accent);stroke-width:3.2}

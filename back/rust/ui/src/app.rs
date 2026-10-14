@@ -1407,7 +1407,7 @@ fn rail(s: &State) -> N {
 }
 
 fn window_frame(s: &State, content: N) -> N {
-    let idx = s.open.iter().position(|(p, a)| is_current(s, *p, a));
+    // no close button (owner, 2026-10-14): π, in the rail or on the floating canvas, goes back to the canvas
     let arg = match s.page {
         Page::Paper => s.paper.as_str(),
         Page::Confirm => s.ctoken.as_str(),
@@ -1419,16 +1419,7 @@ fn window_frame(s: &State, content: N) -> N {
         .kid(
             el("div")
                 .cls("win-head")
-                .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg)))
-                .kid_if(idx.is_some(), || {
-                    el("button")
-                        .cls("win-x")
-                        .attr("aria-label", "Close")
-                        .attr("title", "Close")
-                        .text("×")
-                        .on("click", Msg::Close(idx.unwrap_or(0)))
-                        .into()
-                }),
+                .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg))),
         )
         .kid(el("div").cls("win-body").kid(el("div").cls("win-in").kid(content)))
         .kid(ports())
