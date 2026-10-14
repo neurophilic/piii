@@ -56,6 +56,12 @@ pub extern "C" fn ret(len: usize) -> *mut u8 {
     host::ret_buffer(len)
 }
 
+/// An open page dragged by its bare background: by (dx, dy) px.
+#[unsafe(no_mangle)]
+pub extern "C" fn panned(dx: f64, dy: f64) {
+    app::on_page_pan(dx, dy);
+}
+
 /// Zoom asked for anywhere (a pinch, Ctrl/⌘ and the wheel, Ctrl/⌘ +, − or 0): deltaY (0 resets), and the point.
 #[unsafe(no_mangle)]
 pub extern "C" fn zoomed(dy: f64, x: f64, y: f64) {

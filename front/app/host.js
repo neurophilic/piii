@@ -99,6 +99,8 @@ const host = {
       n.addEventListener("drop", (e) => { e.preventDefault(); send(id, k, fileList(e.dataTransfer.files)); });
     } else n.addEventListener(k, (e) => {
       if (n.dataset && n.dataset.stop) e.stopPropagation();
+      // a tip sitting on a link (the sidebar's icons) wires; it does not follow the link
+      if (n.dataset && n.dataset.nonav) e.preventDefault();
       send(id, k, n.type === "checkbox" ? (n.checked ? "1" : "0") : (n.value ?? ""));
     });
   },
@@ -314,19 +316,19 @@ addEventListener("touchmove", (e) => {
   pinch = d;
 }, { passive: false });
 addEventListener("touchend", () => { pinch = 0; });
-// A drag on the bare background of an open page pans it (it scrolls, with no scroll bar shown).
+// Every page pans (owner, 2026-10-14: "every page can pan"): a drag on its bare background moves what it shows, any
+// way, as the canvas does; the program keeps the offset.
 addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || !e.target.closest) return;
   const body = e.target.closest(".win-body");
   if (!body || e.target.closest("[data-solid], button, a, input, textarea, select, label, [contenteditable], .ports-svg, .board-ports")) return;
-  const x0 = e.clientX, y0 = e.clientY, l0 = body.scrollLeft, t0 = body.scrollTop;
-  let moved = false;
+  let lx = e.clientX, ly = e.clientY, moved = false;
   const mv = (ev) => {
-    const dx = ev.clientX - x0, dy = ev.clientY - y0;
-    if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
-    moved = true; body.scrollLeft = l0 - dx; body.scrollTop = t0 - dy;
+    if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) < 4) return;
+    if (!moved) document.documentElement.classList.add("panning");
+    moved = true; W.panned(ev.clientX - lx, ev.clientY - ly); lx = ev.clientX; ly = ev.clientY;
   };
-  const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
+  const up = () => { document.documentElement.classList.remove("panning"); removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
   addEventListener("pointermove", mv); addEventListener("pointerup", up);
 });
 W.start();
