@@ -80,6 +80,8 @@ enum Msg {
     Print,
     PDown(usize, String),
     FloatDown(String),
+    /// A double click on the bare canvas: left makes a sparkle, right (true) a super.
+    Dbl(bool, String),
     PMember(u8),
     Activate(u8),
     WireSel(u8),
@@ -96,6 +98,7 @@ impl crate::dom::Fill for Msg {
         match self {
             Msg::PDown(id, _) => Msg::PDown(id, v),
             Msg::FloatDown(_) => Msg::FloatDown(v),
+            Msg::Dbl(b, _) => Msg::Dbl(b, v),
             Msg::TV(t, a) => Msg::T(t, a, v),
             m => m,
         }
@@ -246,6 +249,7 @@ struct State {
     note: String,
     /// the tools that were JavaScript (tools.rs)
     t: Tools,
+    t2: Tools2,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -277,7 +281,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}", TOOLS_CSS, PROG_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -363,6 +367,7 @@ pub fn start() {
         wiring: None,
         note: String::new(),
         t: Tools::default(),
+        t2: Tools2::default(),
         prog: Prog::default(),
     };
 
@@ -419,6 +424,7 @@ pub fn start() {
     }
     host::timer(400, T_PI);
     request(Want::Session, "GET", "/api/auth/session", "", 0);
+    request(Want::Tool(Tool::Perf, 6), "GET", "/api/pien/model", "", 0);
     request(Want::Emission, "GET", "/api/emission", "", 0);
     request(Want::Trial, "GET", "/api/trial/status", "", 0);
     if st().consent.map(|c| c[0]).unwrap_or(false) {
@@ -577,6 +583,16 @@ fn route() {
     if s.page != Page::Home {
         open_win(s.page, &arg);
     }
+    // PiEN learns which window was opened
+    if s.page != Page::Home {
+        let key = match s.page {
+            Page::Item(g, m) => GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)).map(|x| x.0.to_string()).unwrap_or_default(),
+            Page::Paper => "A paper".to_string(),
+            p => super_name(s, p, ""),
+        };
+        pien_learn(&key);
+    }
+    let s = st();
     // a tool whose window is no longer the page stops what it runs
     let on_tool = match s.page {
         Page::Item(g, m) => matches!(GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)), Some((_, Target::Tool(_)))),
@@ -1220,6 +1236,7 @@ fn update(msg: Msg) {
         Msg::Print => host::print(),
         Msg::PDown(id, xy) => begin_drag(id, &xy),
         Msg::FloatDown(xy) => float_begin(&xy),
+        Msg::Dbl(sup, xy) => canvas_add(sup, &xy),
         Msg::PMember(m) => s.pend_member = Some(m),
         Msg::Activate(id) => activate(id as usize, None),
         Msg::Port(id, t) => {
@@ -2740,6 +2757,7 @@ fn short(w: &str) -> String {
 include!("scene.rs");
 include!("tools.rs");
 include!("program.rs");
+include!("tools2.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {

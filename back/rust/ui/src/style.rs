@@ -263,7 +263,7 @@ font-size:20px;line-height:1;color:var(--muted)}
 .wires .w.control{stroke-dasharray:12 8}
 .wires .w.gate{stroke-width:4.5;stroke-dasharray:0.1 9;stroke-linecap:round}
 .wires .head.flow{fill:var(--magenta)}.wires .head.ink{fill:#2b2b2b}
-.ports-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.ports-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5}
 .ports-svg .port{pointer-events:all;cursor:pointer}
 .ports-svg .port .pad{fill:transparent}
 .ports-svg .port .mark{fill:var(--paper);stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round}

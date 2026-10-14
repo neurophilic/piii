@@ -459,10 +459,11 @@ const GROUPS: [Group; 5] = [
             ("Live", Target::Hash("#/live")),
             ("The journal", Target::Hash("#/explore/journal")),
             ("Leaderboards", Target::Hash("#/explore/papers")),
+            ("Super AI", Target::Tool(Tool::Ask)),
             ("Proof-of-Research Ledger Explorer", Target::Data("/api/explorer/latest?limit=30", "Every assessment as a block on the Proof-of-Research ledger.")),
-            ("Recent assessments", Target::Hash("#/explore")),
-            ("Analytics", Target::Data("/api/analytics/summary", "The corpus in numbers.")),
-            ("Performance", Target::Data("/api/forecast", "piD's forecast from the ledger.")),
+            ("Recent assessments", Target::Tool(Tool::Recent)),
+            ("Analytics", Target::Tool(Tool::Analytics)),
+            ("Performance", Target::Tool(Tool::Perf)),
             ("Minting Difficulty", Target::Hash("#/library")),
         ],
     },
@@ -473,7 +474,7 @@ const GROUPS: [Group; 5] = [
             ("RiBD", Target::Data("/api/buddy/suggest", "Papers to read, suggested for your profile.")),
             ("The Global Map of Science", Target::Soon("The map of science and its game drew every assessed field as a graph.")),
             ("Whitepaper", Target::Url("/ScholarPi_Whitepaper.pdf")),
-            ("Architecture", Target::Hash("#/map")),
+            ("Architecture", Target::Tool(Tool::Arch)),
             ("Capabilities", Target::Words(
                 "siM is the lab's own assistant model. riB learns which papers are worth reading. piD forecasts from the \
                  ledger. PiEn learns how the site is used. Super AI joins them, with Llama, Mistral, Qwen, Gemini and \
@@ -489,6 +490,8 @@ const GROUPS: [Group; 5] = [
         members: &[
             ("HAL-OS", Target::Soon("HAL-OS booted an x86 machine in your browser.")),
             ("Unigyro", Target::Tool(Tool::Unigyro)),
+            ("Private projects", Target::Tool(Tool::Private)),
+            ("Permission requests", Target::Tool(Tool::Requests)),
         ],
     },
     Group {
@@ -901,6 +904,7 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls_if(!mini && s.wiring.as_ref().and_then(|w| w.to).map(|(t, _)| t == id).unwrap_or(false), "wire-target")
             .cls_if(!mini && locked(s, id) && id >= S_WELCOME, "locked")
             .attr("data-s", format!("{}", id))
+            .attr_if(id != S_PROG && id != S_HOLD, "data-solid", "1")
             .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
         // only what can be read is clickable: not the small canvas floating on an open super (too small to read; the
         // rail and π get about), and not the holder, which has no words
@@ -965,7 +969,10 @@ fn scene_view(s: &State, mini: bool) -> N {
     el("div")
         .cls("scene")
         .cls_if(s.wiring.is_some() || s.held_port.is_some(), "wiring")
+        .attr("title", "Double click: a sparkle. Double right click: a super.")
         .on("click", Msg::WireSel(255))
+        .on("dbl", Msg::Dbl(false, String::new()))
+        .on("dbl2", Msg::Dbl(true, String::new()))
         .kid(el("div").cls("frame"))
         .kid(stage)
         .kid_if(!s.note.is_empty(), || el("div").cls("wire-note").attr("role", "status").text(s.note.clone()).into())
@@ -1026,6 +1033,7 @@ fn draw_link(mut wires: crate::dom::El<Msg>, mini: bool, sel: bool, i: usize, d:
                 .cls("w-hit")
                 .attr("data-stop", "1")
                 .attr("d", d)
+                .attr("data-solid", "1")
                 .on("click", Msg::WireSel(i as u8))
                 .on("dblclick", Msg::WireDel(i as u8)),
         );
@@ -1088,6 +1096,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                 };
             let mut gp = el("svg:g")
                 .attr("data-p", format!("{}-{}", id, tip.name()))
+                .attr("data-solid", "1")
                 .cls("port")
                 .cls(if tip == Tip::Out { "out" } else { "tip" })
                 .cls_if(on, "on")
@@ -1603,8 +1612,11 @@ fn group_page(gi: usize) -> N {
                 Target::Soon(_) => (format!("#/i/{}/{}", gi, m), "Being rewritten in Rust", false),
                 Target::Tool(_) => (format!("#/i/{}/{}", gi, m), "", false),
             };
+            let pien = st().t2.pien.pick.as_deref() == Some(*name);
             el("a")
                 .cls("member sx-like")
+                .cls_if(pien, "pien")
+                .attr_if(pien, "title", "PiEN suggests this next")
                 .attr("href", href)
                 .attr_if(ext, "target", "_blank")
                 .attr_if(ext, "rel", "noopener")

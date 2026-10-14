@@ -56,6 +56,17 @@ const host = {
     const n = nodes[id], k = str(kp, kl);
     if (k === "enter") n.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(id, k, n.value || ""); } });
     else if (k === "pdown") n.addEventListener("pointerdown", (e) => { if (e.button === 0) send(id, k, e.clientX + "," + e.clientY); });
+    // a double click (left: "dbl", right: "dbl2") on the node itself, not on anything marked data-solid inside it
+    else if (k === "dbl") n.addEventListener("dblclick", (e) => { if (!e.target.closest("[data-solid]")) { e.preventDefault(); send(id, k, e.clientX + "," + e.clientY); } });
+    else if (k === "dbl2") {
+      let last = 0;
+      n.addEventListener("contextmenu", (e) => {
+        if (e.target.closest("[data-solid]")) return;
+        e.preventDefault();
+        const t = Date.now();
+        if (t - last < 450) { last = 0; send(id, k, e.clientX + "," + e.clientY); } else last = t;
+      });
+    }
     else if (k === "files") n.addEventListener("change", () => { const v = fileList(n.files); n.value = ""; send(id, k, v); });
     else if (k === "drop") {
       n.addEventListener("dragover", (e) => e.preventDefault());

@@ -10,6 +10,14 @@ pub enum Tool {
     Frenzy,
     /// the canvas's program (program.rs)
     Prog,
+    // tools2.rs
+    Arch,
+    Recent,
+    Perf,
+    Analytics,
+    Private,
+    Requests,
+    Ask,
 }
 
 /// What every tool keeps.
@@ -29,6 +37,13 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Md => md_view(s),
         Tool::Frenzy => frenzy_view(s),
         Tool::Prog => txt(""),
+        Tool::Arch => arch_view(s),
+        Tool::Recent => recent_view(s),
+        Tool::Perf => perf_view(s),
+        Tool::Analytics => analytics_view(s),
+        Tool::Private => private_view(s),
+        Tool::Requests => requests_view(s),
+        Tool::Ask => ask_view(s),
     }
 }
 
@@ -39,12 +54,15 @@ fn tool_load(t: Tool) {
         s.t.md.busy = true;
         request(Want::Tool(Tool::Md, 0), "GET", "/medicine/plan.json?v=1", "", 0);
     }
+    tools2_load(t);
 }
 
-fn tool_apply(t: Tool, _what: u8, v: Value, err: Option<String>) {
+fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
     let s = st();
     if t == Tool::Md {
         put(&mut s.t.md, v, err);
+    } else {
+        tools2_apply(t, what, v, err);
     }
 }
 
@@ -52,7 +70,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
     match t {
         Tool::Frenzy => frenzy_update(a, v),
         Tool::Prog => prog_update(a, v),
-        _ => {}
+        _ => tools2_update(t, a, v),
     }
 }
 

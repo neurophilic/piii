@@ -73,6 +73,9 @@ fn unode(s: &State, id: usize) -> Option<&UNode> {
 
 /// A node's size: wide enough for what is typed in it.
 fn unode_size(text: &str) -> (f64, f64) {
+    if text == SPARKLE {
+        return (64.0, 64.0);
+    }
     let w = (text.chars().count() as f64 * 9.2 + 34.0).clamp(96.0, 320.0);
     (w, 58.0)
 }
@@ -128,7 +131,7 @@ fn kind_of(text: &str) -> Kind {
     let word = low.split_whitespace().next().unwrap_or("");
     let rest = t.split_once(char::is_whitespace).map(|x| x.1).unwrap_or("");
     match word {
-        "" | "pick" => return Kind::Pick,
+        "" | "pick" | SPARKLE => return Kind::Pick,
         "reg" | "register" => return Kind::Reg(literal(rest).unwrap_or(Value::Num(0.0))),
         "stop" => return Kind::Stop,
         "show" | "display" => return Kind::Show,
@@ -856,7 +859,55 @@ fn example_load(i: usize) {
 
 // ---------------------------------------------------------------------------------------------- the view
 
+/// What a sparkle is: a junction (a double click on the canvas makes one). It passes on what arrives.
+const SPARKLE: &str = "✦";
+
+/// A double click on the bare canvas: left, a sparkle; right, a super (owner, 2026-10-14), where it was clicked.
+fn canvas_add(sup: bool, at: &str) {
+    let s = st();
+    let mut it = at.split(',');
+    let (Some(Ok(x)), Some(Ok(y))) = (it.next().map(|v| v.parse::<f64>()), it.next().map(|v| v.parse::<f64>())) else { return };
+    let g = geo(s);
+    let p = ((x - g.ox) / g.k, (y - g.oy) / g.k);
+    let (px, py, _, _) = rect(&g, S_PROG);
+    let text = if sup { "" } else { SPARKLE };
+    let (w, h) = unode_size(text);
+    let id = prog_add(text, p.0 - px - w / 2.0, p.1 - py - h / 2.0);
+    st().prog.sel = Some(id);
+    prog_save();
+    note(if sup {
+        "A super: type in it what it does (3, +, reg 0, stop…)".to_string()
+    } else {
+        "A sparkle: a junction that passes on what arrives".to_string()
+    });
+}
+
+fn sparkle_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
+    let v = vtext(s.prog.vals.get(&n.id).unwrap_or(&Value::Null));
+    el("div")
+        .cls("sx unode sparkle")
+        .cls_if(s.prog.sel == Some(n.id), "sel")
+        .attr("data-s", format!("{}", n.id))
+        .attr("data-solid", "1")
+        .attr("title", if v.is_empty() { "A sparkle: a junction".to_string() } else { format!("A sparkle: {}", v) })
+        .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", r.0, r.1, r.2, r.3))
+        .on_if(!mini, "pdown", Msg::PDown(n.id, String::new()))
+        .kid(
+            el("svg:svg")
+                .attr("viewBox", "-17 -17 34 34")
+                .attr("width", "34")
+                .attr("height", "34")
+                .attr("aria-hidden", "true")
+                .kid(el("svg:path").attr("d", star(0.0, 0.0, 14.0))),
+        )
+        .kid_if(!v.is_empty(), || el("span").cls("sp-val").text(v.clone()).into())
+        .into()
+}
+
 fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
+    if n.text == SPARKLE {
+        return sparkle_view(s, n, r, mini);
+    }
     let k = kind_of(&n.text);
     let val = if let Kind::Reg(_) = k { s.prog.regs.get(&n.id).cloned().unwrap_or(Value::Null) } else { s.prog.vals.get(&n.id).cloned().unwrap_or(Value::Null) };
     let shown = vtext(&val);
@@ -875,6 +926,7 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         .cls_if(s.prog.sel == Some(n.id), "sel")
         .cls_if(!shown.is_empty(), "has-val")
         .attr("data-s", format!("{}", n.id))
+        .attr("data-solid", "1")
         .attr("title", format!("{}: {}", kind_name(&k), n.text))
         .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", r.0, r.1, r.2, r.3))
         .on_if(!mini, "pdown", Msg::PDown(n.id, String::new()))
@@ -945,6 +997,9 @@ const PROG_CSS: &str = "\
 .sx.prog>.tag{position:absolute;left:14px;top:12px}\
 .p-status{position:absolute;left:110px;right:14px;top:14px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\
 .sx.unode{background:#fff;border:1.4px solid #2b2b2b;display:flex;flex-direction:column;justify-content:center;padding:4px 10px;cursor:grab;z-index:2}\
+.sx.unode.sparkle{background:transparent;border:0;padding:0;box-shadow:none;overflow:visible;display:grid;place-items:center}\
+.sparkle path{fill:var(--ink)}.sparkle.sel path{fill:var(--accent)}.sx.unode.sparkle.sel{outline:0}\
+.sp-val{position:absolute;top:100%;left:50%;transform:translateX(-50%);font-size:11.5px;color:var(--magenta);font-weight:600;white-space:nowrap}\
 .sx.unode.sel{outline:2px solid var(--accent);outline-offset:3px}\
 .u-text{font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;border:0;background:transparent;width:100%;padding:0;color:var(--ink);text-align:center;outline:none;cursor:text}\
 .u-val{font-size:11.5px;color:var(--faint);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}\
