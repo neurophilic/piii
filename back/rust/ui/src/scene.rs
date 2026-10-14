@@ -1245,7 +1245,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         .kid(el("div").cls("frame"))
         .kid(stage)
         .kid_if(!s.note.is_empty(), || el("div").cls("wire-note").attr("role", "status").text(s.note.clone()).into())
-        .kid(footer())
+        // no footer line on the canvas (owner, 2026-10-14: "delete this")
         .into()
 }
 

@@ -2212,6 +2212,7 @@ fn confirm_page(s: &State) -> N {
 }
 
 
+#[allow(dead_code)]
 fn footer() -> N {
     el("footer")
         .cls("foot")
