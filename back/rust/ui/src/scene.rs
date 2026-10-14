@@ -426,11 +426,18 @@ fn icon_view(id: usize) -> N {
 }
 
 /// What the lock acts on: the selected canvas, newest kind first. Some((is it unlocked now)), or None.
+/// Is the main canvas the one in use (its selection is what the lock acts on)? A selection left on it does not
+/// follow you to another page.
+fn canvas_live(s: &State) -> bool {
+    s.page == Page::Home || s.peek
+}
+
 fn lock_target_free(s: &State) -> Option<bool> {
     if let Page::Group(g) = s.page {
         if let Some(b) = s.boards.get(g as usize) {
             if let Some(n) = b.picked {
-                return Some(b.free.contains(&n));
+                // an icon is never locked
+                return Some(bnode_free(b, n));
             }
         }
     }
@@ -439,6 +446,9 @@ fn lock_target_free(s: &State) -> Option<bool> {
     }
     if s.win_pick {
         return Some(s.win_free);
+    }
+    if !canvas_live(s) {
+        return None;
     }
     if let Some(id) = s.sup_pick {
         return Some(!locked(s, id));
@@ -490,7 +500,8 @@ fn lock_toggle() {
         note(if s.win_free { "The window is unlocked: drag its edges to resize it" } else { "The window is locked at its size" }.to_string());
         return;
     }
-    let id = match (s.sup_pick, s.prog.sel) {
+    let picks = if canvas_live(s) { (s.sup_pick, s.prog.sel) } else { (None, None) };
+    let id = match picks {
         (Some(id), _) | (None, Some(id)) => id,
         _ => {
             note("Select a canvas first, then click the lock to unlock it".to_string());

@@ -1518,7 +1518,9 @@ fn view(s: &State) -> N {
             el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
         }
     };
-    el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).kid(modal_view(s)).kid(toasts_view(s)).into()
+    // the canvas shows its own note; elsewhere it floats over the page, so the lock's answers are always seen
+    let page_note = s.page != Page::Home && !s.peek && !s.note.is_empty();
+    el("div").cls("app").kid(body).kid_if(page_note, || el("div").cls("wire-note page-note").attr("role", "status").text(s.note.clone()).into()).kid_if(s.consent_open, || consent_panel(s)).kid(modal_view(s)).kid(toasts_view(s)).into()
 }
 
 
