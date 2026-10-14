@@ -56,7 +56,10 @@ fn board(gi: usize) -> &'static mut Board {
 
 fn board_default(n: usize) -> (Vec<(f64, f64)>, Vec<(usize, usize, u8)>) {
     // as many columns as the window holds (the rail and margins aside), at most four
-    let cols = (((host::vw() - 300.0) / (BW + BGAP_X)) as usize).clamp(1, BCOLS);
+    // the window's inner width: the page beside the rail (70% of it when opened over the canvas), at most 1000
+    let page = host::vw() - 92.0;
+    let avail = (if st().peek { page * 0.7 } else { page }).min(1000.0) - 48.0 - 24.0;
+    let cols = (((avail + BGAP_X) / (BW + BGAP_X)) as usize).clamp(1, BCOLS);
     let pos = (0..n).map(|i| (24.0 + (i % cols) as f64 * (BW + BGAP_X), 24.0 + (i / cols) as f64 * (BH + BGAP_Y))).collect();
     // reading order along each row, one into the next
     let links = (1..n).filter(|i| i % cols != 0).map(|i| (i - 1, i, 0)).collect();
@@ -199,8 +202,16 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             if moved {
                 board_save(gi);
             } else if phase == 1 && how != 2 && node < board(gi).pos.len() {
-                // a press without a move is a click: it opens the member
-                board_open(gi, node);
+                // a double click opens the member, as everywhere
+                let now = host::now();
+                let s = st();
+                if s.last_tap.0 == 10_000 + node && now - s.last_tap.2 < 450.0 {
+                    s.last_tap = (usize::MAX, None, 0.0);
+                    s.peek_next = s.peek;
+                    board_open(gi, node);
+                } else {
+                    s.last_tap = (10_000 + node, None, now);
+                }
             }
         }
     }
@@ -423,7 +434,7 @@ fn group_board(gi: usize) -> N {
         });
     }
     el("div")
-        .kid(head(g.title, "Everything in this super, on its own canvas. Click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Supers stay where they are: shift + drag moves one, the middle button resizes it, and the lock frees them all."))
+        .kid(head(g.title, "Everything in this super, on its own canvas. Double click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Supers stay where they are: shift + drag moves one, the middle button resizes it, and the lock frees them all."))
         .kid(
             el("div")
                 .cls("board")

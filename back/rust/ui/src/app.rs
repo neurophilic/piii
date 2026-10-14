@@ -249,6 +249,11 @@ struct State {
     float_drag: Option<FloatDrag>,
     /// the floating canvas grown by a click (owner, 2026-10-14: "clicking grows the canvas")
     float_big: bool,
+    /// the last single click on a super, to tell a double click (id, member, time)
+    last_tap: (usize, Option<u8>, f64),
+    /// what is open was opened by a double click on the canvas: it takes 70% of it, the canvas live around it
+    peek: bool,
+    peek_next: bool,
     pend_at: (f64, f64),
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
@@ -384,6 +389,9 @@ pub fn start() {
         float_at: None,
         float_drag: None,
         float_big: false,
+        last_tap: (usize::MAX, None, 0.0),
+        peek: false,
+        peek_next: false,
         pend_at: (0.0, 0.0),
         wire_sel: None,
         wiring: None,
@@ -574,6 +582,12 @@ fn route() {
     let s = st();
     // a window over the page belongs to the page it was opened on
     s.modal = None;
+    s.peek = core::mem::take(&mut s.peek_next);
+    // the start page is the Tools super, open (owner, 2026-10-14: "make this the start page"); π goes to the canvas
+    if !href.contains('#') {
+        host::replace_url("#/g/0");
+        return route();
+    }
     match parts.next().unwrap_or("") {
         "" => s.page = Page::Home,
         "map" => s.page = Page::Map,
@@ -587,6 +601,7 @@ fn route() {
             // an item that is another page (Live, the journal, your account) opens that page
             if let Some((_, Target::Hash(h))) = GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)) {
                 host::replace_url(h);
+                s.peek_next = s.peek;
                 return route();
             }
             if GROUPS.get(g as usize).map(|x| (m as usize) < x.members.len()).unwrap_or(false) {
@@ -1425,7 +1440,13 @@ fn view(s: &State) -> N {
         };
         // the canvas's controls float over every page (owner, 2026-10-14: "keep these supers floating over the whole
         // website always")
-        el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
+        // what is open takes 70% of the canvas, which stays live around it (owner, 2026-10-14: "double clicking
+        // anything opens it to 70% of the canvas"); on a phone it still takes the screen
+        if s.peek && host::vw() >= 700.0 {
+            el("div").cls("focus peek").kid(scene_view(s, false)).kid(rail(s)).kid(window_frame(s, page)).into()
+        } else {
+            el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
+        }
     };
     el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).kid(modal_view(s)).kid(toasts_view(s)).into()
 }

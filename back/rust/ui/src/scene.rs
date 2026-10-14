@@ -1545,8 +1545,19 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 if d.moved {
                     layout_save();
                 }
-            } else if !d.moved {
+            } else if !d.moved && (is_ctl_super(d.id) || matches!(d.id, S_TITLE | S_RUN | S_CLEAR) || is_unode(d.id)) {
+                // the controls are buttons: one click does it
                 activate(d.id, d.member);
+            } else if !d.moved {
+                // anything else opens on a double click
+                let now = host::now();
+                if s.last_tap.0 == d.id && s.last_tap.1 == d.member && now - s.last_tap.2 < 450.0 {
+                    s.last_tap = (usize::MAX, None, 0.0);
+                    s.peek_next = true;
+                    activate(d.id, d.member);
+                } else {
+                    s.last_tap = (d.id, d.member, now);
+                }
             } else if is_unode(d.id) {
                 prog_save();
             }
