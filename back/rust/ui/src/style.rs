@@ -206,7 +206,7 @@ border:1px solid var(--line);border-radius:28px;color:var(--ink);transition:tran
 .canvas .foot-in{justify-content:center}
 /* focus: the open super fills the canvas; everything else is an icon in the rail */
 .focus{min-height:100vh}
-.rail{position:fixed;left:0;top:0;bottom:0;width:68px;z-index:10;display:flex;flex-direction:column;align-items:center;gap:8px;
+.rail{position:fixed;left:0;top:0;bottom:0;width:68px;z-index:2147482999;display:flex;flex-direction:column;align-items:center;gap:8px;
 padding:12px 0;background:var(--paper);border-right:1px solid var(--line)}
 .ric{position:relative;flex:none;width:44px;height:44px;border-radius:14px;border:1px solid var(--line2);background:var(--card);
 display:grid;place-items:center;color:var(--ink);font-weight:600;font-size:13px;transition:transform .15s ease,border-color .15s ease}
