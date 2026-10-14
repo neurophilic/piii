@@ -132,7 +132,8 @@ fn bnode(b: &Board, i: usize) -> (f64, f64, f64, f64) {
             None => return (0.0, 0.0, 0.0, 0.0),
         }
     };
-    (x, y, (w + gw).max(36.0), (h + gh).max(32.0))
+    // no limit either way, as on the main canvas; under 10% of the window it is an icon
+    (x, y, (w + gw).max(MIN_SUPER), (h + gh).max(MIN_SUPER))
 }
 
 fn btip(b: &Board, i: usize, t: u8) -> (f64, f64) {

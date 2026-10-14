@@ -392,6 +392,9 @@ fn locked(s: &State, id: usize) -> bool {
 /// An icon is drawn as one and is never locked; it changes as the canvas zooms or the super is resized.
 const ICON_SHARE: f64 = 0.10;
 
+/// The smallest a super gets, in design units (a speck, but never nothing: the canvas zooms in without end to find it).
+const MIN_SUPER: f64 = 0.5;
+
 fn icon_area(w_px: f64, h_px: f64) -> bool {
     w_px * h_px < ICON_SHARE * host::vw() * host::vh()
 }
@@ -1707,7 +1710,9 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             if d.moved && resizable {
                 let (b, _, _) = base(host::vw() < 700.0);
                 let (bw, bh) = (b[d.id].2, b[d.id].3);
-                let (w, h) = ((bw + d.size0.0 + dx).max(48.0), (bh + d.size0.1 + dy).max(40.0));
+                // no limit either way (owner, 2026-10-14: "a super can get infinitely bigger or infinitely smaller"): it only
+                // stays above nothing, so it can still be found by zooming in; under 10% of the window it is an icon
+                let (w, h) = ((bw + d.size0.0 + dx).max(MIN_SUPER), (bh + d.size0.1 + dy).max(MIN_SUPER));
                 s.sizes[d.id] = (w - bw, h - bh);
                 s.dirty = true;
             } else if d.moved && movable {
