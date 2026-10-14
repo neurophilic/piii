@@ -878,8 +878,8 @@ fn scene_view(s: &State, mini: bool) -> N {
             .style(format!("{}width:{:.0}px;height:{:.0}px", at, w, h))
             .on("pdown", Msg::FloatDown(String::new()))
             .kid(el("div").cls("frame"))
+            // no π badge on it (owner, 2026-10-14: "delete this logo"); π in the rail goes back to the canvas
             .kid(stage)
-            .kid(el("a").cls("pi-tab").attr("href", "#/").attr("aria-label", "Back to the whole canvas").attr("title", "The whole canvas").text("π"))
             .into();
     }
     el("div")
