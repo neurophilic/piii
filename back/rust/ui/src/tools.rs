@@ -8,6 +8,8 @@ pub enum Tool {
     Unigyro,
     Md,
     Frenzy,
+    /// the canvas's program (program.rs)
+    Prog,
 }
 
 /// What every tool keeps.
@@ -26,6 +28,7 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Unigyro => unigyro_view(),
         Tool::Md => md_view(s),
         Tool::Frenzy => frenzy_view(s),
+        Tool::Prog => txt(""),
     }
 }
 
@@ -46,8 +49,10 @@ fn tool_apply(t: Tool, _what: u8, v: Value, err: Option<String>) {
 }
 
 fn tool_update(t: Tool, a: u16, v: String) {
-    if t == Tool::Frenzy {
-        frenzy_update(a, v)
+    match t {
+        Tool::Frenzy => frenzy_update(a, v),
+        Tool::Prog => prog_update(a, v),
+        _ => {}
     }
 }
 

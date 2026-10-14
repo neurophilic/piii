@@ -78,15 +78,17 @@ enum Msg {
     ConfirmNote(String),
     ConfirmAnswer(bool),
     Print,
-    PDown(u8, String),
+    PDown(usize, String),
     FloatDown(String),
     PMember(u8),
     Activate(u8),
     WireSel(u8),
     WireDel(u8),
-    Port(u8, u8),
+    Port(usize, u8),
     /// A tool's action, with what was typed or chosen (tools.rs).
     T(Tool, u16, String),
+    /// A tool's action that takes in the event's value (a field's text).
+    TV(Tool, u16),
 }
 
 impl crate::dom::Fill for Msg {
@@ -94,6 +96,7 @@ impl crate::dom::Fill for Msg {
         match self {
             Msg::PDown(id, _) => Msg::PDown(id, v),
             Msg::FloatDown(_) => Msg::FloatDown(v),
+            Msg::TV(t, a) => Msg::T(t, a, v),
             m => m,
         }
     }
@@ -243,6 +246,8 @@ struct State {
     note: String,
     /// the tools that were JavaScript (tools.rs)
     t: Tools,
+    /// the program drawn on the canvas (program.rs)
+    prog: Prog,
 }
 
 static STATE: Global<Option<State>> = Global::new(None);
@@ -272,7 +277,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(TOOLS_CSS);
+    let tools_css = host::create_text(&format!("{}{}", TOOLS_CSS, PROG_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -358,6 +363,7 @@ pub fn start() {
         wiring: None,
         note: String::new(),
         t: Tools::default(),
+        prog: Prog::default(),
     };
 
     // Coming back from ORCID: the callback sends ?orcid=…&orcid_name=…&token=… (or ?orcid_error=…).
@@ -399,7 +405,11 @@ pub fn start() {
     *STATE.get() = Some(s);
     layout_load();
     float_load();
+    let had_program = prog_load();
     wires_load();
+    if !had_program {
+        example_load(0);
+    }
 
     route();
     let s = st();
@@ -1086,6 +1096,7 @@ fn update(msg: Msg) {
     let s = st();
     match msg {
         Msg::T(t, a, v) => tool_update(t, a, v),
+        Msg::TV(t, a) => tool_update(t, a, String::new()),
         Msg::Mode(m) => {
             s.mode = m;
             s.form_err = None;
@@ -1207,13 +1218,13 @@ fn update(msg: Msg) {
             }
         }
         Msg::Print => host::print(),
-        Msg::PDown(id, xy) => begin_drag(id as usize, &xy),
+        Msg::PDown(id, xy) => begin_drag(id, &xy),
         Msg::FloatDown(xy) => float_begin(&xy),
         Msg::PMember(m) => s.pend_member = Some(m),
         Msg::Activate(id) => activate(id as usize, None),
         Msg::Port(id, t) => {
             if let Some(tip) = Tip::of(t) {
-                port_click(id as usize, tip);
+                port_click(id, tip);
             }
         }
         Msg::WireSel(i) => {
@@ -1305,7 +1316,9 @@ fn view(s: &State) -> N {
             Page::Map => map_page(),
             Page::Home => txt(""),
         };
-        el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).into()
+        // the canvas's controls float over every page (owner, 2026-10-14: "keep these supers floating over the whole
+        // website always")
+        el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
     };
     el("div").cls("app").kid(body).kid_if(s.consent_open, || consent_panel(s)).into()
 }
@@ -2726,3 +2739,24 @@ fn short(w: &str) -> String {
 
 include!("scene.rs");
 include!("tools.rs");
+include!("program.rs");
+
+/// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
+fn ctl_bar(s: &State) -> N {
+    el("div")
+        .cls("ctl-bar")
+        .attr("role", "toolbar")
+        .attr("aria-label", "The canvas's controls")
+        .kids([S_SAVE, S_LOCK, S_CHAIN, S_RESET].iter().map(|&id| -> N {
+            el("button")
+                .attr("type", "button")
+                .cls("sx ctl")
+                .attr("title", sup_label(id))
+                .attr("aria-label", sup_label(id))
+                .on("click", Msg::Activate(id as u8))
+                .kid(control_icon(id, s))
+                .kid(ports())
+                .into()
+        }))
+        .into()
+}

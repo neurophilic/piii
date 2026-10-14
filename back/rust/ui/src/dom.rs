@@ -82,6 +82,9 @@ impl<M> El<M> {
     pub fn style(self, v: impl Into<String>) -> Self {
         self.attr("style", v)
     }
+    pub fn on_if(self, cond: bool, kind: &'static str, m: M) -> Self {
+        if cond { self.on(kind, m) } else { self }
+    }
     pub fn on(mut self, kind: &'static str, m: M) -> Self {
         self.on.push((kind, Handler::Msg(m)));
         self

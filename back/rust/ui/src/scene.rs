@@ -41,7 +41,14 @@ const S_EXPLORE: usize = 15;
 const S_LIBRARY: usize = 16;
 const S_LAB: usize = 17;
 const S_PROJECT: usize = 18;
-const NSUP: usize = 19;
+// the program (program.rs): its super, the palette, the examples, and run, step and clear
+const S_PROG: usize = 19;
+const S_PALETTE: usize = 20;
+const S_EXAMPLES: usize = 21;
+const S_RUN: usize = 22;
+const S_STEP: usize = 23;
+const S_CLEAR: usize = 24;
+const NSUP: usize = 25;
 
 type Rect = (f64, f64, f64, f64);
 
@@ -59,45 +66,58 @@ fn base(narrow: bool) -> ([Rect; NSUP], f64, f64) {
                 (624.0, 843.0, 50.0, 48.0),
                 (756.0, 843.0, 50.0, 48.0),
                 (840.0, 843.0, 50.0, 48.0),
-                (296.0, 213.0, 849.0, 474.0),
-                (325.0, 244.0, 226.0, 118.0),
-                (325.0, 381.0, 226.0, 184.0),
-                (346.0, 586.0, 64.0, 64.0),
-                (427.0, 594.0, 137.0, 48.0),
-                (585.0, 244.0, 531.0, 412.0),
-                (671.0, 309.0, 98.0, 97.0),
-                (930.0, 309.0, 98.0, 97.0),
-                (671.0, 494.0, 98.0, 97.0),
-                (930.0, 494.0, 98.0, 97.0),
+                (24.0, 96.0, 676.0, 420.0),
+                (44.0, 118.0, 300.0, 98.0),
+                (44.0, 236.0, 300.0, 168.0),
+                (44.0, 428.0, 64.0, 64.0),
+                (132.0, 436.0, 170.0, 48.0),
+                (370.0, 118.0, 310.0, 378.0),
+                (398.0, 146.0, 104.0, 100.0),
+                (552.0, 146.0, 104.0, 100.0),
+                (398.0, 366.0, 104.0, 100.0),
+                (552.0, 366.0, 104.0, 100.0),
+                (724.0, 96.0, 692.0, 734.0),
+                (370.0, 540.0, 330.0, 220.0),
+                (24.0, 540.0, 320.0, 220.0),
+                (996.0, 9.0, 50.0, 48.0),
+                (1080.0, 9.0, 50.0, 48.0),
+                (1164.0, 9.0, 50.0, 48.0),
             ],
             1440.0,
             900.0,
         )
     } else {
+        // a phone: the same canvas, stacked (the site, then the examples and palette, then the program), scaled to fit
         (
             [
-                (14.0, 14.0, 140.0, 40.0),
-                (178.0, 14.0, 36.0, 40.0),
-                (234.0, 14.0, 36.0, 40.0),
-                (290.0, 14.0, 36.0, 40.0),
-                (346.0, 14.0, 36.0, 40.0),
-                (87.0, 792.0, 36.0, 40.0),
-                (143.0, 792.0, 36.0, 40.0),
-                (211.0, 792.0, 36.0, 40.0),
-                (267.0, 792.0, 36.0, 40.0),
-                (12.0, 76.0, 366.0, 696.0),
-                (26.0, 94.0, 338.0, 92.0),
-                (26.0, 204.0, 338.0, 140.0),
-                (26.0, 362.0, 64.0, 64.0),
-                (104.0, 370.0, 150.0, 46.0),
-                (26.0, 444.0, 338.0, 312.0),
-                (46.0, 468.0, 132.0, 120.0),
-                (212.0, 468.0, 132.0, 120.0),
-                (46.0, 616.0, 132.0, 120.0),
-                (212.0, 616.0, 132.0, 120.0),
+                (14.0, 14.0, 190.0, 44.0),
+                (330.0, 12.0, 50.0, 48.0),
+                (412.0, 12.0, 50.0, 48.0),
+                (494.0, 12.0, 50.0, 48.0),
+                (576.0, 12.0, 50.0, 48.0),
+                (0.0, 1460.0, 50.0, 48.0),
+                (0.0, 1460.0, 50.0, 48.0),
+                (0.0, 1460.0, 50.0, 48.0),
+                (0.0, 1460.0, 50.0, 48.0),
+                (8.0, 80.0, 684.0, 420.0),
+                (24.0, 96.0, 310.0, 110.0),
+                (24.0, 222.0, 310.0, 160.0),
+                (24.0, 400.0, 64.0, 64.0),
+                (112.0, 408.0, 170.0, 48.0),
+                (360.0, 96.0, 316.0, 390.0),
+                (390.0, 124.0, 104.0, 100.0),
+                (546.0, 124.0, 104.0, 100.0),
+                (390.0, 350.0, 104.0, 100.0),
+                (546.0, 350.0, 104.0, 100.0),
+                (8.0, 748.0, 684.0, 700.0),
+                (354.0, 516.0, 338.0, 216.0),
+                (8.0, 516.0, 330.0, 216.0),
+                (240.0, 1460.0, 50.0, 48.0),
+                (324.0, 1460.0, 50.0, 48.0),
+                (408.0, 1460.0, 50.0, 48.0),
             ],
-            390.0,
-            844.0,
+            700.0,
+            1515.0,
         )
     }
 }
@@ -161,9 +181,8 @@ type WireT = (usize, usize, Tip);
 type PassT = (usize, Tip, usize, Tip);
 
 /// The start (pitechlab.sasm, `diagram`), in the language's terms.
-const START_WIRES: [WireT; 7] = [
+const START_WIRES: [WireT; 6] = [
     (PAGE_IN, S_SITE, Tip::In),
-    (S_SITE, PAGE_OUT, Tip::In),
     (S_TOOLS, S_EXPLORE, Tip::In),
     (S_EXPLORE, S_LIBRARY, Tip::In),
     (S_LAB, S_PROJECT, Tip::In),
@@ -176,6 +195,11 @@ const START_PASSES: [PassT; 4] = [
     (S_EXPLORE, Tip::Gate, S_LAB, Tip::Control),
     (S_LIBRARY, Tip::Gate, S_PROJECT, Tip::Control),
 ];
+
+/// Supers taken off the canvas (owner, 2026-10-14: the arrows, "delete these icons"); the title still moves the view.
+fn is_gone(id: usize) -> bool {
+    matches!(id, S_LEFT | S_UP | S_DOWN | S_RIGHT)
+}
 
 fn is_ctl_super(id: usize) -> bool {
     matches!(id, S_SAVE | S_LOCK | S_CHAIN | S_RESET)
@@ -216,10 +240,31 @@ fn gated(s: &State, id: usize) -> bool {
     s.wires.iter().any(|w| w.1 == id && w.2 == Tip::Gate) || s.passes.iter().any(|p| p.2 == id && p.3 == Tip::Gate)
 }
 
+/// Is there a path of wires (or passes) from `a` to `b` that does not pass through a register? (A loop through a
+/// register is how a program repeats; one without would never settle.)
+fn reaches_direct(s: &State, a: usize, b: usize) -> bool {
+    let (mut stack, mut seen) = (alloc::vec![a], Vec::new());
+    while let Some(n) = stack.pop() {
+        if n == b {
+            return true;
+        }
+        if !seen.contains(&n) && (n == a || !is_reg(s, n)) {
+            seen.push(n);
+            stack.extend(s.wires.iter().filter(|w| w.0 == n).map(|w| w.1));
+            stack.extend(s.passes.iter().filter(|p| p.0 == n).map(|p| p.2));
+        }
+    }
+    false
+}
+
+fn loops(s: &State, from: usize, to: usize) -> bool {
+    !is_reg(s, from) && !is_reg(s, to) && reaches_direct(s, to, from)
+}
+
 /// Can `from`'s out be wired to `to`'s `tip`? Or why not.
 fn can_connect(s: &State, from: usize, to: usize, tip: Tip) -> Result<(), &'static str> {
-    if from == to {
-        return Err("a node can not feed itself");
+    if from == to && !is_reg(s, from) {
+        return Err("a node can not feed itself (a register can: reg feeds its own next value)");
     }
     if !has_tip(from, Tip::Out) {
         return Err("the page's right edge has no out");
@@ -230,21 +275,17 @@ fn can_connect(s: &State, from: usize, to: usize, tip: Tip) -> Result<(), &'stat
     if !has_tip(to, tip) {
         return Err(if to == PAGE_OUT { "the page's edge takes only an in" } else { "this super has no inputs" });
     }
-    let ctl = is_ctl_super(from);
-    if tip == Tip::Control && !ctl {
-        return Err("only save, lock, chain or reset go into a control");
-    }
-    if tip != Tip::Control && ctl {
+    if is_ctl_super(from) && tip != Tip::Control {
         return Err("save, lock, chain and reset go into a control");
     }
-    if tip == Tip::Gate {
-        return Err("a gate arrives passed on from another super's control or gate");
+    if tip == Tip::Gate && gated(s, to) {
+        return Err("a super has one gate");
     }
     if s.wires.contains(&(from, to, tip)) {
         return Err("already wired");
     }
-    if reaches(s, to, from) {
-        return Err("that would make a loop");
+    if loops(s, from, to) {
+        return Err("that would make a loop with no register in it: put a reg in the loop");
     }
     Ok(())
 }
@@ -268,8 +309,8 @@ fn can_relay(s: &State, from: usize, ft: Tip, to: usize, tt: Tip) -> Result<(), 
     if tt == Tip::Gate && gated(s, to) {
         return Err("a super has one gate");
     }
-    if reaches(s, to, from) {
-        return Err("that would make a loop");
+    if loops(s, from, to) {
+        return Err("that would make a loop with no register in it: put a reg in the loop");
     }
     Ok(())
 }
@@ -294,20 +335,20 @@ fn wires_save() {
     for (a, ta, b, tb) in &s.passes {
         out.push_str(&format!("p{}-{}-{}-{};", a, ta.code(), b, tb.code()));
     }
-    host::store_set("piii:wires", &out);
+    host::store_set("piii:wires2", &out);
 }
 
 fn wires_load() {
     let s = st();
     s.wires = START_WIRES.to_vec();
     s.passes = START_PASSES.to_vec();
-    let Some(v) = host::store_get("piii:wires") else { return };
+    let Some(v) = host::store_get("piii:wires2") else { return };
     let mut it = v.split(';');
     if it.next() != Some("v2") {
         return;
     }
-    let ok = |id: usize| id < NSUP || id == PAGE_IN || id == PAGE_OUT;
-    let (mut ws, mut ps) = (Vec::new(), Vec::new());
+    let ok = |id: usize| (id < NSUP && !is_gone(id)) || id == PAGE_IN || id == PAGE_OUT || s.prog.nodes.iter().any(|n| n.id == id);
+    let (mut ws, mut ps): (Vec<WireT>, Vec<PassT>) = (Vec::new(), Vec::new());
     for e in it.filter(|e| !e.is_empty()) {
         let n: Vec<usize> = e[1..].split('-').filter_map(|x| x.parse().ok()).collect();
         match (e.as_bytes()[0], n.as_slice()) {
@@ -341,14 +382,18 @@ fn chain_on(s: &State, id: usize) -> bool {
     s.chained || arriving(s, id, Tip::Control, 0).contains(&S_CHAIN)
 }
 
-fn name_of(id: usize) -> &'static str {
+fn name_of(id: usize) -> String {
     match id {
-        FRAME => "the page",
-        PAGE_IN => "the page's left edge",
-        PAGE_OUT => "the page's right edge",
-        S_SITE => "the site",
-        S_HOLD => "the holder",
-        _ => sup_label(id),
+        FRAME => "the page".to_string(),
+        PAGE_IN => "the page's left edge".to_string(),
+        PAGE_OUT => "the page's right edge".to_string(),
+        S_SITE => "the site".to_string(),
+        S_HOLD => "the holder".to_string(),
+        _ if is_unode(id) => match unode(st(), id) {
+            Some(n) => format!("“{}”", n.text),
+            None => "a node".to_string(),
+        },
+        _ => sup_label(id).to_string(),
     }
 }
 
@@ -368,6 +413,7 @@ pub struct Wiring {
 fn held_by(id: usize) -> &'static [usize] {
     match id {
         S_HOLD => &[S_EXPLORE, S_LIBRARY, S_LAB, S_PROJECT],
+        S_SITE => &[S_WELCOME, S_TOOLS, S_CONNECT, S_PRIVACY, S_HOLD, S_EXPLORE, S_LIBRARY, S_LAB, S_PROJECT],
         _ => &[],
     }
 }
@@ -483,6 +529,16 @@ struct Geo {
     w: f64,
     h: f64,
     rects: [Rect; NSUP],
+    /// the program's nodes, placed
+    extra: Vec<(usize, Rect)>,
+}
+
+/// Where a super or a program node is, in design units.
+fn rect(g: &Geo, id: usize) -> Rect {
+    if id < NSUP {
+        return g.rects[id];
+    }
+    g.extra.iter().find(|(i, _)| *i == id).map(|(_, r)| *r).unwrap_or((0.0, 0.0, 0.0, 0.0))
 }
 
 fn geo(s: &State) -> Geo {
@@ -499,11 +555,16 @@ fn geo_box(s: &State, w: f64, h: f64, narrow: bool) -> Geo {
     let mut rects = b;
     for (i, r) in rects.iter_mut().enumerate() {
         let (dx, dy) = s.offs[i];
-        let pan = if i >= S_SITE { s.pan } else { (0.0, 0.0) };
+        let pan = if i >= S_SITE && !matches!(i, S_RUN | S_STEP | S_CLEAR) { s.pan } else { (0.0, 0.0) };
         r.0 += dx + pan.0;
         r.1 += dy + pan.1;
     }
-    Geo { k, ox, oy, w, h, rects }
+    let (px, py, _, _) = rects[S_PROG];
+    let extra = s.prog.nodes.iter().map(|n| {
+        let (w, h) = unode_size(&n.text);
+        (n.id, (px + n.x, py + n.y, w, h))
+    }).collect();
+    Geo { k, ox, oy, w, h, rects, extra }
 }
 
 /// A port, in design units (the frame's own ports sit on the page's edge).
@@ -518,7 +579,7 @@ fn port(g: &Geo, id: usize, side: Side) -> (f64, f64) {
             Side::B => ((l + r) / 2.0, b - 1.0),
         };
     }
-    let (x, y, w, h) = g.rects[id];
+    let (x, y, w, h) = rect(g, id);
     match side {
         Side::L => (x, y + h / 2.0),
         Side::R => (x + w, y + h / 2.0),
@@ -643,6 +704,10 @@ fn control_icon(id: usize, s: &State) -> N {
         S_UP => svg_icon(&["M12 19V5", "M6 11l6-6 6 6"], "26", "ci"),
         S_DOWN => svg_icon(&["M12 5v14", "M6 13l6 6 6-6"], "26", "ci"),
         S_RIGHT => svg_icon(&["M5 12h14", "M13 6l6 6-6 6"], "26", "ci"),
+        S_RUN => el("svg:svg").cls("ci accent").attr("viewBox", "0 0 24 24").attr("width", "24").attr("height", "24").attr("aria-hidden", "true")
+            .kid(el("svg:path").attr("d", "M7 4.5v15l12-7.5z").attr("fill", "currentColor")).into(),
+        S_STEP => svg_icon(&["M6 5l9 7-9 7z", "M18 5v14"], "24", "ci"),
+        S_CLEAR => svg_icon(&["M6 6h12v12H6z"], "22", "ci"),
         _ => txt(""),
     }
 }
@@ -650,6 +715,12 @@ fn control_icon(id: usize, s: &State) -> N {
 fn sup_label(id: usize) -> &'static str {
     match id {
         S_TITLE => "piii lab",
+        S_PROG => "Program",
+        S_PALETTE => "Palette",
+        S_EXAMPLES => "Examples",
+        S_RUN => "Run the program",
+        S_STEP => "One step",
+        S_CLEAR => "Clear the values",
         S_SAVE => "Save the layout",
         S_LOCK => "Lock: supers stay where they are",
         S_CHAIN => "Chain: a holder brings what it holds",
@@ -820,7 +891,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         .style(format!("transform:translate({:.1}px,{:.1}px) scale({:.4})", g.ox, g.oy, g.k))
         .kid(wires);
     for id in 0..NSUP {
-        if id == S_SITE {
+        if id == S_SITE || is_gone(id) {
             continue;
         }
         let (x, y, w, h) = g.rects[id];
@@ -834,7 +905,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         // only what can be read is clickable: not the small canvas floating on an open super (too small to read; the
         // rail and π get about), and not the holder, which has no words
         if !mini && id != S_HOLD {
-            sx = sx.on("pdown", Msg::PDown(id as u8, String::new()));
+            sx = sx.on("pdown", Msg::PDown(id, String::new()));
         }
         let label = sup_label(id);
         if !label.is_empty() && id != S_HOLD && !mini {
@@ -842,7 +913,10 @@ fn scene_view(s: &State, mini: bool) -> N {
         }
         sx = match id {
             S_TITLE => sx.cls("title").text("piii lab"),
-            S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT => sx.cls("ctl").attr("title", label).kid(control_icon(id, s)),
+            S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT | S_RUN | S_STEP | S_CLEAR => sx.cls("ctl").attr("title", label).kid(control_icon(id, s)),
+            S_PROG => sx.cls("prog").kids(prog_region_view(s)),
+            S_PALETTE => sx.cls("palette").kids(palette_view()),
+            S_EXAMPLES => sx.cls("examples").kids(examples_view()),
             S_WELCOME => sx.cls("words").text(WELCOME),
             S_TOOLS => sx.cls("tools").kids(tools_inside()),
             S_CONNECT => sx.cls("bubble small").kids(bubble_inside(4, true)),
@@ -864,6 +938,10 @@ fn scene_view(s: &State, mini: bool) -> N {
             sx = sx.cls("moving");
         }
         stage = stage.kid(sx);
+    }
+    // the program's nodes, over its super
+    for n in &s.prog.nodes {
+        stage = stage.kid(unode_view(s, n, rect(&g, n.id), mini));
     }
     stage = stage.kid(ports_svg);
     if mini {
@@ -992,11 +1070,12 @@ fn libm_cos(x: f64) -> f64 {
 /// The ports to wire with, over everything: each node's out (filled), its tips (drawn round); while a wire is being
 /// made, the tips it may join are marked.
 fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
-    let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 7.0 } else { 10.0 / g.k.max(0.6) };
+    let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 12.0 } else { 10.0 / g.k.max(0.6) };
     let mut svg = el("svg:svg").cls("ports-svg").attr("width", "1").attr("height", "1").attr("aria-hidden", if mini { "true" } else { "false" });
-    let mut nodes: Vec<usize> = (0..NSUP).collect();
+    let mut nodes: Vec<usize> = (0..NSUP).filter(|i| *i != S_PALETTE && *i != S_EXAMPLES && !is_gone(*i)).collect();
     nodes.push(PAGE_IN);
     nodes.push(PAGE_OUT);
+    nodes.extend(s.prog.nodes.iter().map(|n| n.id));
     for id in nodes {
         for &tip in tips_of(id) {
             let (x, y) = if tip == Tip::Out { leave_point(g, id, if is_ctl_super(id) { Tip::Control } else { Tip::In }) } else { tip_point(g, id, tip) };
@@ -1017,7 +1096,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
             if !mini {
                 gp = gp
                     .attr("data-stop", "1")
-                    .on("click", Msg::Port(id as u8, tip.code()))
+                    .on("click", Msg::Port(id, tip.code()))
                     .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 1.4)))
                     .kid(el("svg:title").text(format!("{}: {}", name_of(id), match tip {
                         Tip::Out => "out. Click, then click a tip",
@@ -1129,6 +1208,23 @@ pub struct Drag {
     pan0: (f64, f64),
 }
 
+/// Where a super has been moved to (its offset), or where a program node is in its super.
+fn pos_of(s: &State, id: usize) -> (f64, f64) {
+    if id < NSUP {
+        return s.offs[id];
+    }
+    unode(s, id).map(|n| (n.x, n.y)).unwrap_or((0.0, 0.0))
+}
+
+fn set_pos(s: &mut State, id: usize, p: (f64, f64)) {
+    if id < NSUP {
+        s.offs[id] = p;
+    } else if let Some(n) = s.prog.nodes.iter_mut().find(|n| n.id == id) {
+        n.x = p.0;
+        n.y = p.1;
+    }
+}
+
 fn begin_drag(id: usize, at: &str) {
     let s = st();
     let mut it = at.split(',');
@@ -1146,15 +1242,23 @@ fn begin_drag(id: usize, at: &str) {
     if chain_on(s, id) {
         ids.extend_from_slice(held_by(id));
     }
-    let start = ids.iter().map(|i| (*i, s.offs[*i])).collect();
+    if is_unode(id) {
+        s.prog.sel = Some(id);
+    }
+    let start = ids.iter().map(|i| (*i, pos_of(s, *i))).collect();
     s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan });
     host::capture(true);
 }
 
 /// The super under a point (the topmost), the site when only the site is there, the page near its edge.
 fn sup_at(g: &Geo, p: (f64, f64)) -> Option<usize> {
+    for (id, (x, y, w, h)) in g.extra.iter().rev() {
+        if p.0 >= *x && p.0 <= x + w && p.1 >= *y && p.1 <= y + h {
+            return Some(*id);
+        }
+    }
     for id in (0..NSUP).rev() {
-        if id == S_SITE {
+        if id == S_SITE || is_gone(id) {
             continue;
         }
         let (x, y, w, h) = g.rects[id];
@@ -1179,7 +1283,7 @@ fn side_for(g: &Geo, id: usize, p: (f64, f64), ctl: Option<bool>) -> Side {
     let (cx, cy) = if id == FRAME {
         (port(g, FRAME, Side::T).0, port(g, FRAME, Side::L).1)
     } else {
-        let (x, y, w, h) = g.rects[id];
+        let (x, y, w, h) = rect(g, id);
         (x + w / 2.0, y + h / 2.0)
     };
     let (dx, dy) = (p.0 - cx, p.1 - cy);
@@ -1189,7 +1293,7 @@ fn side_for(g: &Geo, id: usize, p: (f64, f64), ctl: Option<bool>) -> Side {
         Some(true) => vert,
         Some(false) => horiz,
         None => {
-            let (w, h) = if id == FRAME { (g.w / g.k, g.h / g.k) } else { (g.rects[id].2, g.rects[id].3) };
+            let (w, h) = if id == FRAME { (g.w / g.k, g.h / g.k) } else { (rect(g, id).2, rect(g, id).3) };
             if dx.abs() / w.max(1.0) > dy.abs() / h.max(1.0) { horiz } else { vert }
         }
     }
@@ -1234,6 +1338,8 @@ pub fn on_key(key: &str) {
         "Delete" | "Backspace" => {
             if let Some(i) = s.wire_sel {
                 remove_link(i);
+            } else if let Some(id) = s.prog.sel {
+                prog_remove(id);
             }
         }
         _ => return,
@@ -1353,7 +1459,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             }
             if d.moved && movable {
                 for (i, (ox, oy)) in d.start.clone() {
-                    s.offs[i] = (ox + dx, oy + dy);
+                    set_pos(s, i, (ox + dx, oy + dy));
                 }
                 s.dirty = true;
             } else if d.moved && d.id == S_TITLE {
@@ -1367,6 +1473,8 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
             let d = s.drag.take().unwrap();
             if !d.moved {
                 activate(d.id, d.member);
+            } else if is_unode(d.id) {
+                prog_save();
             }
             render();
         }
@@ -1389,13 +1497,13 @@ fn layout_save() {
         out.push_str(&format!("{:.1},{:.1};", x, y));
     }
     out.push_str(&format!("|{:.1},{:.1}|{}|{}", s.pan.0, s.pan.1, s.locked as u8, s.chained as u8));
-    host::store_set("piii:layout", &out);
+    host::store_set("piii:layout2", &out);
     s.dirty = false;
 }
 
 fn layout_load() {
     let s = st();
-    let Some(v) = host::store_get("piii:layout") else { return };
+    let Some(v) = host::store_get("piii:layout2") else { return };
     let parts: Vec<&str> = v.split('|').collect();
     if let Some(offs) = parts.first() {
         for (i, p) in offs.split(';').filter(|p| !p.is_empty()).enumerate().take(NSUP) {
@@ -1435,9 +1543,15 @@ fn activate(id: usize, member: Option<u8>) {
             s.passes = START_PASSES.to_vec();
             s.wire_sel = None;
             s.held_port = None;
-            host::store_del("piii:layout");
-            host::store_del("piii:wires");
+            host::store_del("piii:layout2");
+            host::store_del("piii:wires2");
+            example_load(0);
         }
+        S_RUN => prog_run(None),
+        S_STEP => prog_run(Some(1)),
+        S_CLEAR => prog_clear(),
+        S_PROG | S_PALETTE | S_EXAMPLES => s.prog.sel = None,
+        _ if is_unode(id) => s.prog.sel = Some(id),
         S_LEFT => s.pan.0 -= 60.0,
         S_RIGHT => s.pan.0 += 60.0,
         S_UP => s.pan.1 -= 60.0,

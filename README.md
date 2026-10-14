@@ -34,6 +34,29 @@ Wiring follows the superellipse language (github.com/ex-tern/superellipse). Ever
 - **The controls:** save, lock, chain and reset feed a super's control. Whatever arrives there, wired or passed on, acts on that super: lock keeps it in place, chain makes it bring what it holds, save keeps the layout, and reset puts it back where it started.
 - **How wires look:** flow wires (into an in) are magenta, control wires dashed, gate wires dotted, and each ends in an arrowhead. The ins of one tip share a bus.
 
+### The language
+
+The canvas is a working dataflow language, like LabVIEW's block diagram, and it is Turing complete. The **Program** super holds nodes; the **Palette** adds them, and **Examples** loads five programs: count to 10, factorial, Fibonacci, Euclid's gcd and a Turing machine (a two-state busy beaver).
+
+- **What a node does** follows what is typed in it:
+  - a constant: `3`, `"words"`, `[1, 2, 3]`;
+  - an operation: `+ − × ÷ % ^ < > = ≠ ≤ ≥ and or not min max &`;
+  - `reg 0`: a register, LabVIEW's shift register;
+  - `pick`, `stop`, `show` and `open`;
+  - the list operations `list`, `at`, `set`, `len` and `push`.
+- **The terminals:**
+  - **in** takes values top to bottom, in the order of the supers they come from;
+  - **control** is a trigger: the node runs once a value has arrived there;
+  - **gate** is a condition: the node runs only when it is true;
+  - **out** feeds any number of tips.
+- **Running:**
+  - ▶ runs step after step. In each step every node computes once, in wire order, and then every register takes its new value. The run ends at a `stop`, when the registers settle, or after 100 000 steps.
+  - ⏭ runs one step, and ⏹ clears.
+- **Loops** must pass through a register; any other loop is refused.
+- **Why it is Turing complete:** registers hold any value, lists grow and are read and written anywhere, and gates choose.
+
+The controls (save, lock, chain, reset) float over every page.
+
 When a super is open, the canvas floats on top of it and the other supers wait as icons; click π to return to the whole canvas.
 
 The project map (`#/map`) shows the whole lab in the same notation: one prompt fanned out to every engine, and the assessment from manuscript to ledger.
