@@ -2270,7 +2270,7 @@ fn group_page(gi: usize) -> N {
     let g = &GROUPS[gi];
     el("div")
         .kid(el("div").cls("head").kid(el("h1").text(g.title)))
-        .kid(el("div").cls("members").kids(g.members.iter().enumerate().map(|(m, (name, t))| -> N {
+        .kid(el("div").cls("members").kids(g.members.iter().enumerate().filter(|(m, _)| !member_hidden(gi, *m)).map(|(m, (name, t))| -> N {
             let (href, note, ext) = match t {
                 Target::Hash(h) => (h.to_string(), "", false),
                 Target::Url(u) => (u.to_string(), "Opens in a new tab", true),

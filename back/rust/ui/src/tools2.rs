@@ -815,7 +815,7 @@ fn pien_save() {
 
 /// Every window PiEN can suggest: the members of the bubbles.
 fn pien_keys() -> Vec<&'static str> {
-    GROUPS.iter().flat_map(|g| g.members.iter().map(|m| m.0)).filter(|k| !matches!(*k, "GitHub" | "Contact us")).collect()
+    GROUPS.iter().flat_map(|g| g.members.iter().map(|m| m.0)).filter(|k| !matches!(*k, "GitHub" | "Contact us" | "Owner console" | "Private projects" | "Permission requests")).collect()
 }
 
 fn share_u(row: Option<&BTreeMap<String, u32>>, k: &str) -> f64 {

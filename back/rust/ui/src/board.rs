@@ -66,6 +66,31 @@ fn board(gi: usize) -> &'static mut Board {
     &mut s.boards[gi]
 }
 
+/// A member only the owner sees (owner, 2026-10-14: "in Connect, Owner console should be only shown to the owner";
+/// "permission requests, private projects should be only shown to the owner").
+fn owner_only_member(gi: usize, m: usize) -> bool {
+    matches!(GROUPS.get(gi).and_then(|g| g.members.get(m)), Some((_, Target::Tool(Tool::Owner | Tool::Private | Tool::Requests))))
+}
+
+/// Whether a member is hidden from whoever is looking.
+fn member_hidden(gi: usize, m: usize) -> bool {
+    owner_only_member(gi, m) && !is_owner(st())
+}
+
+/// The first layout of a group's board: everyone's members in reading order, wired one into the next along each row;
+/// the owner's own after them, on their own, so the board looks the same with or without them.
+fn board_layout(gi: usize, n: usize) -> (Vec<(f64, f64)>, Vec<(usize, usize, u8)>) {
+    let order: Vec<usize> = (0..n).filter(|m| !owner_only_member(gi, *m)).chain((0..n).filter(|m| owner_only_member(gi, *m))).collect();
+    let shared = (0..n).filter(|m| !owner_only_member(gi, *m)).count();
+    let (grid, links) = board_default(n);
+    let mut pos = alloc::vec![(0.0, 0.0); n];
+    for (slot, m) in order.iter().enumerate() {
+        pos[*m] = grid[slot];
+    }
+    let links = links.into_iter().filter(|l| l.0 < shared && l.1 < shared).map(|l| (order[l.0], order[l.1], l.2)).collect();
+    (pos, links)
+}
+
 fn board_default(n: usize) -> (Vec<(f64, f64)>, Vec<(usize, usize, u8)>) {
     // as many columns as the window holds (the rail and margins aside), at most four
     // the window's inner width: the page beside the rail (70% of it when opened over the canvas), at most 1000
@@ -81,7 +106,7 @@ fn board_default(n: usize) -> (Vec<(f64, f64)>, Vec<(usize, usize, u8)>) {
 fn board_load(gi: usize, b: &mut Board) {
     b.loaded = true;
     let n = GROUPS.get(gi).map(|g| g.members.len()).unwrap_or(0);
-    let (pos, links) = board_default(n);
+    let (pos, links) = board_layout(gi, n);
     b.pos = pos;
     b.links = links;
     b.extra.clear();
@@ -127,7 +152,7 @@ fn board_snap(b: &Board, from: usize, ftip: u8, at: (f64, f64)) -> Option<(usize
     let mut best: Option<(f64, usize, u8)> = None;
     for n in 0..b.pos.len() + b.extra.len() {
         for t in 0u8..4 {
-            if (n, t) == (from, ftip) || !tips_join(ftip, t) {
+            if (n, t) == (from, ftip) || !tips_join(ftip, t) || matches!(st().page, Page::Group(g) if member_hidden(g as usize, n)) {
                 continue;
             }
             let (tx, ty) = btip(b, n, t);
@@ -646,6 +671,9 @@ fn group_board(gi: usize) -> N {
     let du = wire_scale(pz) / pz;
     let mut wires = el("svg:svg").cls("wires").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h)).style(format!("--wz:{:.3}", du)).kid(el("svg:defs").kid(arrowhead("bah-flow", "flow", 10.0 * du)).kid(arrowhead("bah-ink", "ink", 10.0 * du)));
     for (i, (from, to, v)) in b.links.iter().enumerate() {
+        if member_hidden(gi, *from) || member_hidden(gi, *to) {
+            continue;
+        }
         let (ft, tt) = (link_from(*v), link_to(*v));
         let a = btip(&b, *from, ft);
         let z = btip(&b, *to, tt);
@@ -679,6 +707,9 @@ fn group_board(gi: usize) -> N {
     // tips
     let mut tips = el("svg:svg").cls("ports-svg board-ports").cls_if(b.held.is_some(), "holding").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h));
     for i in 0..total {
+        if member_hidden(gi, i) {
+            continue;
+        }
         for t in 0..4u8 {
             let (x, y) = btip(&b, i, t);
             let held = b.held == Some(i) && t == b.held_tip;
@@ -708,6 +739,9 @@ fn group_board(gi: usize) -> N {
     // supers
     let mut nodes: Vec<N> = Vec::new();
     for (m, (name, t)) in g.members.iter().enumerate() {
+        if member_hidden(gi, m) {
+            continue;
+        }
         let (x, y, bw, bh) = bnode(&b, m);
         let note = match t {
             Target::Url(_) => "Opens in a new tab",
