@@ -46,6 +46,7 @@ unsafe extern "C" {
     pub fn vh() -> f64;
     pub fn capture(on: u32);
     pub fn call(op: *const u8, ol: usize, a: *const u8, al: usize) -> i32;
+    pub fn download(np: *const u8, nl: usize, tp: *const u8, tl: usize, dp: *const u8, dl: usize);
 }
 }
 
@@ -181,6 +182,9 @@ mod imp {
     pub fn call_(op: &str, a: &str) -> Option<String> {
         answer(unsafe { call(op.as_ptr(), op.len(), a.as_ptr(), a.len()) })
     }
+    pub fn download_(name: &str, mime: &str, data: &[u8]) {
+        unsafe { download(name.as_ptr(), name.len(), mime.as_ptr(), mime.len(), data.as_ptr(), data.len()) }
+    }
 }
 
 // Outside the browser (cargo check, unit tests) the host does nothing.
@@ -224,6 +228,7 @@ mod imp {
     pub fn vh_() -> f64 { 800.0 }
     pub fn capture_(_: bool) {}
     pub fn call_(_: &str, _: &str) -> Option<String> { None }
+    pub fn download_(_: &str, _: &str, _: &[u8]) {}
 }
 
 pub use imp::{
@@ -247,4 +252,9 @@ pub fn log(s: &str) {
 /// text; some answer.
 pub fn call(op: &str, arg: &str) -> Option<String> {
     imp::call_(op, arg)
+}
+
+/// Hands the browser bytes to save as a file.
+pub fn download(name: &str, mime: &str, data: &[u8]) {
+    imp::download_(name, mime, data)
 }

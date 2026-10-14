@@ -18,6 +18,10 @@ pub enum Tool {
     Private,
     Requests,
     Ask,
+    // quvi.rs
+    Quvi,
+    // facemace.rs
+    Face,
 }
 
 /// What every tool keeps.
@@ -44,6 +48,8 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Private => private_view(s),
         Tool::Requests => requests_view(s),
         Tool::Ask => ask_view(s),
+        Tool::Quvi => quvi_view(s),
+        Tool::Face => face_view(s),
     }
 }
 
@@ -54,6 +60,12 @@ fn tool_load(t: Tool) {
         s.t.md.busy = true;
         request(Want::Tool(Tool::Md, 0), "GET", "/medicine/plan.json?v=1", "", 0);
     }
+    if t == Tool::Quvi {
+        quvi_load();
+    }
+    if t == Tool::Face {
+        face_load();
+    }
     tools2_load(t);
 }
 
@@ -61,6 +73,10 @@ fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
     let s = st();
     if t == Tool::Md {
         put(&mut s.t.md, v, err);
+    } else if t == Tool::Face {
+        face_apply(v, err);
+    } else if t == Tool::Quvi {
+        put(&mut s.quvi.features, v, err);
     } else {
         tools2_apply(t, what, v, err);
     }
@@ -70,6 +86,8 @@ fn tool_update(t: Tool, a: u16, v: String) {
     match t {
         Tool::Frenzy => frenzy_update(a, v),
         Tool::Prog => prog_update(a, v),
+        Tool::Quvi => quvi_update(a, v),
+        Tool::Face => face_update(a, v),
         _ => tools2_update(t, a, v),
     }
 }

@@ -250,6 +250,8 @@ struct State {
     /// the tools that were JavaScript (tools.rs)
     t: Tools,
     t2: Tools2,
+    quvi: Quvi,
+    face: Face,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -281,7 +283,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -368,6 +370,8 @@ pub fn start() {
         note: String::new(),
         t: Tools::default(),
         t2: Tools2::default(),
+        quvi: Quvi::default(),
+        face: Face::default(),
         prog: Prog::default(),
     };
 
@@ -2758,6 +2762,8 @@ include!("scene.rs");
 include!("tools.rs");
 include!("program.rs");
 include!("tools2.rs");
+include!("quvi.rs");
+include!("facemace.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {

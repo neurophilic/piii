@@ -99,6 +99,13 @@ pub extern "C" fn keyed(kp: *mut u8, kl: usize) {
     app::on_key(&key);
 }
 
+/// Bytes the host was asked for (a picture's pixels, w × h; a file's contents): w = 0 means it could not be read.
+#[unsafe(no_mangle)]
+pub extern "C" fn pixels(token: u32, p: *mut u8, len: usize, w: u32, h: u32) {
+    let data = if len > 0 { unsafe { Vec::from_raw_parts(p, len, len) } } else { Vec::new() };
+    app::on_pixels(token, data, w, h);
+}
+
 /// The address changed (a link to #/… was followed, or back or forward).
 #[unsafe(no_mangle)]
 pub extern "C" fn nav() {

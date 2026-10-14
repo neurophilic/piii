@@ -449,7 +449,7 @@ const GROUPS: [Group; 5] = [
         members: &[
             ("Assess Manuscripts [Pi]", Target::Hash("#/assess")),
             ("Assist Diagnosis [Intern]", Target::Tool(Tool::Intern)),
-            ("FaceMace", Target::Soon("FaceMace sorted photos by face, in your browser.")),
+            ("FaceMace", Target::Tool(Tool::Face)),
         ],
     },
     Group {
@@ -488,6 +488,7 @@ const GROUPS: [Group; 5] = [
         sup: S_LAB,
         title: "Lab",
         members: &[
+            ("QuVI", Target::Tool(Tool::Quvi)),
             ("HAL-OS", Target::Soon("HAL-OS booted an x86 machine in your browser.")),
             ("Unigyro", Target::Tool(Tool::Unigyro)),
             ("Private projects", Target::Tool(Tool::Private)),

@@ -126,12 +126,49 @@ const host = {
   vw: () => window.innerWidth,
   vh: () => window.innerHeight,
   capture: (on) => { capturing = !!on; document.documentElement.classList.toggle("dragging", capturing); },
+  download: (np, nl, tp, tl, dp, dl) => {
+    const blob = new Blob([new Uint8Array(W.memory.buffer, dp, dl).slice()], { type: str(tp, tl) });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: str(np, nl) });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  },
   call: (op, ol, ap, al) => { const f = ops[str(op, ol)]; return ret(f ? safe(() => f(str(ap, al)), null) : null); },
 };
 
 // Helpers with no import of their own, called by name: host.call("audio", "play\turl\tloopStart\tloopLength").
 let actx = null, song = null, songUrl = "", src = null, gain = null;
+// Hands bytes back to the program: W.pixels(token, pointer, length, width, height).
+function give(token, bytes, w, h) {
+  const p = bytes.length ? W.alloc(bytes.length) : 0;
+  if (bytes.length) new Uint8Array(W.memory.buffer, p, bytes.length).set(bytes);
+  W.pixels(token, p, bytes.length, w, h);
+}
 const ops = {
+  // a chosen picture, decoded by the browser and shrunk to fit max × max: its RGBA pixels
+  rgba: (a) => {
+    const [token, file, max] = a.split("\t").map(Number);
+    (async () => {
+      try {
+        const bmp = await createImageBitmap(files[file]);
+        const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+        const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+        const cv = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(w, h) : Object.assign(document.createElement("canvas"), { width: w, height: h });
+        const ctx = cv.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0, w, h);
+        if (bmp.close) bmp.close();
+        give(token, ctx.getImageData(0, 0, w, h).data, w, h);
+      } catch (_) { give(token, new Uint8Array(0), 0, 0); }
+    })();
+    return "1";
+  },
+  // a chosen file's bytes
+  bytes: (a) => {
+    const [token, file] = a.split("\t").map(Number);
+    files[file].arrayBuffer().then((b) => give(token, new Uint8Array(b), 1, 1)).catch(() => give(token, new Uint8Array(0), 0, 0));
+    return "1";
+  },
+  // a chosen file, as an address the page can show
+  fileurl: (a) => (files[+a] ? URL.createObjectURL(files[+a]) : ""),
   audio: (a) => {
     const [cmd, url, ls, ll] = a.split("\t");
     const AC = window.AudioContext || window.webkitAudioContext;
