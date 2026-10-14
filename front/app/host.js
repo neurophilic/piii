@@ -320,8 +320,10 @@ addEventListener("touchend", () => { pinch = 0; });
 // way, as the canvas does; the program keeps the offset.
 addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || !e.target.closest) return;
-  const body = e.target.closest(".win-body");
+  // anywhere bare on an open page (its body or its head) selects the window; unlocked, a drag moves the window
+  const body = e.target.closest(".win-body, .win-head");
   if (!body || e.target.closest("[data-solid], button, a, input, textarea, select, label, [contenteditable], .ports-svg, .board-ports")) return;
+  W.page_pressed();
   let lx = e.clientX, ly = e.clientY, moved = false;
   const mv = (ev) => {
     if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) < 4) return;

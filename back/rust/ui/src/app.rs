@@ -278,6 +278,10 @@ struct State {
     pzoom: f64,
     /// how far the open page has been panned (px); back to 0 when another page opens
     ppan: (f64, f64),
+    /// the example program is on the canvas (put there by its sidebar icon; hidden again on the next visit)
+    example_on: bool,
+    /// where the open window has been moved to (px from its place), once unlocked
+    win_off: (f64, f64),
     /// a pan of the canvas by dragging its bare background: press x, y and the pan then
     pan_drag: Option<(f64, f64, (f64, f64))>,
     /// a wire dragged out of a tip on the canvas: where the press began; and when a tip was last pressed (the click that
@@ -441,6 +445,8 @@ pub fn start() {
         note: String::new(),
         pzoom: 1.0,
         ppan: (0.0, 0.0),
+        example_on: false,
+        win_off: (0.0, 0.0),
         pan_drag: None,
         port_drag: None,
         port_press: 0.0,
@@ -512,19 +518,25 @@ pub fn start() {
     }
     layout_load();
     float_load();
+    if let Some(v) = host::store_get("piii:winoff") {
+        let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+        if n.len() == 2 {
+            st().win_off = (n[0], n[1]);
+        }
+    }
     st().pzoom = host::store_get("piii:pzoom").and_then(|v| v.parse::<f64>().ok()).filter(|z| z.is_finite() && *z > 0.0).unwrap_or(1.0);
     prog_load();
     wires_load();
     // the canvas starts empty (owner, 2026-10-14: "delete all these things"): no example program, and the one kept in
     // this browser from before is cleared, once
     if host::store_get("piii:canvas-cleared").is_none() {
-        let s = st();
-        s.prog.nodes.clear();
-        s.prog.sel = None;
-        s.wires.retain(|w| !is_unode(w.0) && !is_unode(w.1));
-        s.passes.retain(|p| !is_unode(p.0) && !is_unode(p.2));
-        prog_save();
+        program_clear();
         host::store_set("piii:canvas-cleared", "1");
+    }
+    // the example is hidden by default (owner, 2026-10-14: "hide this as a default"): shown last time, gone this time
+    if host::store_get("piii:example").is_some() {
+        program_clear();
+        host::store_del("piii:example");
     }
 
     route();
@@ -564,10 +576,58 @@ pub fn on_nav() {
     render();
 }
 
+/// A press anywhere bare on the open window selects it, for the lock (owner, 2026-10-14: "clicking everywhere can make
+/// it movable").
+pub fn on_page_press() {
+    let s = st();
+    if !s.win_pick {
+        relock_except(None, None, true);
+    }
+    let s = st();
+    s.win_pick = true;
+    s.float_pick = false;
+    s.sup_pick = None;
+    if let Page::Group(g) = s.page {
+        board(g as usize).picked = None;
+    }
+    render();
+}
+
+/// A drag on the open window's bare background: unlocked, the window moves; locked, what it shows pans.
 pub fn on_page_pan(dx: f64, dy: f64) {
     let s = st();
-    s.ppan = (s.ppan.0 + dx, s.ppan.1 + dy);
+    if s.win_free {
+        s.win_off = (s.win_off.0 + dx, s.win_off.1 + dy);
+        host::store_set("piii:winoff", &format!("{:.0},{:.0}", s.win_off.0, s.win_off.1));
+    } else {
+        s.ppan = (s.ppan.0 + dx, s.ppan.1 + dy);
+    }
     render();
+}
+
+/// Takes the program (its nodes and their wires) off the canvas.
+fn program_clear() {
+    let s = st();
+    s.prog.nodes.clear();
+    s.prog.sel = None;
+    s.wires.retain(|w| !is_unode(w.0) && !is_unode(w.1));
+    s.passes.retain(|p| !is_unode(p.0) && !is_unode(p.2));
+    prog_save();
+}
+
+/// The example icon: shows "count to 10" on the canvas, or hides it again.
+fn example_toggle() {
+    let s = st();
+    if s.example_on {
+        program_clear();
+        st().example_on = false;
+        host::store_del("piii:example");
+    } else {
+        example_load(0);
+        st().example_on = true;
+        host::store_set("piii:example", "1");
+    }
+    host::go("#/");
 }
 
 /// Zoom, from anywhere: the canvas when it is what is shown, else the open page. 0 puts it back to 1.
@@ -1815,7 +1875,10 @@ fn window_frame(s: &State, content: N) -> N {
         Page::Confirm => s.ctoken.as_str(),
         _ => "",
     };
-    let size = s.win_size.map(|(w, h)| format!("width:{:.0}px;height:{:.0}px", w, h)).unwrap_or_default();
+    let mut size = s.win_size.map(|(w, h)| format!("width:{:.0}px;height:{:.0}px;", w, h)).unwrap_or_default();
+    if s.win_off != (0.0, 0.0) {
+        size.push_str(&format!("transform:translate({:.0}px,{:.0}px)", s.win_off.0, s.win_off.1));
+    }
     el("section")
         .cls("win")
         .cls_if(s.win_pick, "picked")

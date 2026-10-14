@@ -374,6 +374,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene,.win-body{cursor:grab}:where(.scene *,.win-body *){cursor:auto}
 .scene.panning,.scene.panning *,html.panning,html.panning *{cursor:grabbing!important}
 .ric{-webkit-user-drag:none;user-select:none}
+.win.picked .win-head{cursor:grab}
 /* no scroll bar anywhere, ever; everything still scrolls (owner, 2026-10-14) */
 *{scrollbar-width:none;-ms-overflow-style:none}*::-webkit-scrollbar{display:none;width:0;height:0}
 .wire-note.page-note{position:fixed;left:50%;right:auto;bottom:24px;transform:translateX(-50%);z-index:2147483001;max-width:calc(100vw - 32px)}

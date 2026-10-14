@@ -2098,6 +2098,8 @@ fn activate(id: usize, member: Option<u8>) {
             s.free.clear();
             s.float_free = false;
             s.win_free = false;
+            s.win_off = (0.0, 0.0);
+            host::store_del("piii:winoff");
             host::store_del("piii:float-free");
             host::store_del("piii:win-free");
             s.chained = true;

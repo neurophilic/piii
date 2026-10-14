@@ -56,6 +56,12 @@ pub extern "C" fn ret(len: usize) -> *mut u8 {
     host::ret_buffer(len)
 }
 
+/// A press on an open page's bare background or head: the window is selected.
+#[unsafe(no_mangle)]
+pub extern "C" fn page_pressed() {
+    app::on_page_press();
+}
+
 /// An open page dragged by its bare background: by (dx, dy) px.
 #[unsafe(no_mangle)]
 pub extern "C" fn panned(dx: f64, dy: f64) {
