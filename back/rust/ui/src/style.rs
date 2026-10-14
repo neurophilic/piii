@@ -1,16 +1,17 @@
 //! The style sheet: ink on flat paper, one cobalt accent, Geist type, sentence case.
 
-/// The superellipse every super is drawn as: |x/a|^N + |y/b|^N = 1 (owner, 2026-10-14: "make n = 50 throughout the
-/// app"). N = 2 is an ellipse; the larger N, the squarer.
-pub const N: f64 = 50.0;
+/// The superellipse every super is drawn as: |x/a|^N + |y/b|^N = 1, with N = π (owner, 2026-10-14: "make all
+/// n=3.1459", "yes pi"). N = 2 is an ellipse; the larger N, the squarer.
+pub const N: f64 = core::f64::consts::PI;
 
 /// The shape rule for everything boxy: in a browser that draws superellipse corners (CSS corner-shape, whose
 /// parameter is log2 of the exponent), the whole box is the superellipse; elsewhere, a small rounded corner.
 pub fn shape_css() -> alloc::string::String {
-    // Every element, the page's frame included: no round corner anywhere. Where superellipse corners cannot be
-    // drawn, square corners (n = 50 is all but square) rather than round ones.
+    // Every element, the page's frame included, has superellipse corners of exponent N: small things are the whole
+    // superellipse, larger ones have its corners (up to 22 px), so a large window keeps all its content in view.
+    // Where superellipse corners cannot be drawn, square corners rather than round ones.
     alloc::format!(
-        "@supports (corner-shape:superellipse(2)){{*:not(svg *){{border-radius:50%!important;corner-shape:superellipse({k:.4})!important}}}}\
+        "@supports (corner-shape:superellipse(2)){{*:not(svg *){{border-radius:min(50%,22px)!important;corner-shape:superellipse({k:.4})!important}}}}\
 @supports not (corner-shape:superellipse(2)){{*:not(svg *){{border-radius:0!important}}}}",
         k = libm_log2(N)
     )
@@ -257,8 +258,21 @@ font-size:20px;line-height:1;color:var(--muted)}
 .frame{position:absolute;inset:0;border:2px solid var(--accent);pointer-events:none;z-index:3}
 .stage{position:absolute;left:0;top:0;width:1440px;height:900px;transform-origin:0 0}
 .wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:2.2}
-.wires .w.data,.map .w.data{stroke:var(--magenta);stroke-width:3}
+.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:2.2;stroke-linejoin:round}
+.wires .w.flow,.map .w.data{stroke:var(--magenta);stroke-width:3}
+.wires .w.control{stroke-dasharray:12 8}
+.wires .w.gate{stroke-width:4.5;stroke-dasharray:0.1 9;stroke-linecap:round}
+.wires .head.flow{fill:var(--magenta)}.wires .head.ink{fill:#2b2b2b}
+.ports-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.ports-svg .port{pointer-events:all;cursor:pointer}
+.ports-svg .port .pad{fill:transparent}
+.ports-svg .port .mark{fill:var(--paper);stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round}
+.ports-svg .port.out .mark{fill:var(--ink)}
+.ports-svg .port:hover .mark{stroke:var(--accent)}
+.ports-svg .port.out:hover .mark{fill:var(--accent)}
+.ports-svg .port.on .mark{fill:var(--accent);stroke:var(--accent)}
+.ports-svg .port.target .mark{stroke:var(--accent);stroke-width:3.2;fill:#eef0fe}
+.scene.floating .ports-svg .port{pointer-events:none}
 .wires .ports,.map .ports{fill:var(--ink)}
 .sx{position:absolute;background:var(--card);border:1px solid #9a9a95;box-sizing:border-box;cursor:grab;overflow:hidden;
 box-shadow:0 10px 24px -18px rgba(25,25,25,.35)}

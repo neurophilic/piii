@@ -31,3 +31,6 @@ front/hal/build.json
 back/rust/*/target/
 back/rust/ui/target/
 /Untitled
+
+# rustc type-length dumps
+*.long-type-*.txt

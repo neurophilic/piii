@@ -5,12 +5,17 @@
 // on their edges (✦), as written in the site's program (pitechlab.sasm): ▷ an output, ◁ an input, △ sync,
 // ▽ condition. A wire from an output is magenta; the others are ink.
 //
-// Wiring (as the site always did): press a super's edge or one of its ports and drag to another super; the wire is
-// drawn dashed while it is made and the super it would join is lit. Sync and condition (△ ▽) join sync and
-// condition; input and output (◁ ▷) join input and output. A click on a wire selects it, Delete or a double click
-// removes it. Dragging a bar out of a bubble onto anything opens what the bar stands for. A wire into lock locks that
-// super, into chain chains it, into save keeps it (those controls turn cobalt while wired), and wiring a super to
-// reset puts it back where it started. Wires are kept in this browser; reset brings back the start's.
+// Wiring, by the logic of the superellipse language (github.com/ex-tern/superellipse, src/super.rs and Pact): a
+// super has four terminals at its extreme points. Out, on the right, is where a wire leaves; in (left), control (top)
+// and gate (bottom) are where wires arrive, and data flows from left to right. Click an out, then a tip: a wire. Click
+// a control or gate, then another super's control or gate: what arrives at the one is passed on to the other. Esc, or
+// a click anywhere else, lets go; a double click on a wire, or a click and Delete, takes it away. A wire is refused for
+// the language's reasons (a node can not feed itself, out is where a wire leaves, a super has one gate, already wired,
+// that would make a loop), and the reason is said. Save, lock, chain and reset are the canvas's controls: their out
+// goes into a control tip, and what arrives at a super's control (wired, or passed on) acts on it: lock holds it in
+// place, chain makes it bring what it holds, save keeps the layout, and wiring reset puts it back where it started.
+// Wires are drawn as the language draws them: the ins of one tip share a bus, control wires are dashed, gate wires
+// dotted, every wire ends in an arrowhead. Dragging a bar out of a bubble onto anything opens what it stands for.
 //
 // Supers can be dragged (unless locked); with the chain on, the holder brings what it holds. Save keeps the
 // layout in this browser, reset brings back the start. A click opens a super: it fills the canvas, every other
@@ -105,106 +110,252 @@ enum Side {
     B,
 }
 
-/// The wires of the start (pitechlab.sasm, `diagram`). FRAME is the page's own super (main).
+/// A super's four terminals, at its extreme points (±a, 0) and (0, ±b).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Tip {
+    In,
+    Out,
+    Control,
+    Gate,
+}
+
+impl Tip {
+    fn name(self) -> &'static str {
+        match self {
+            Tip::In => "in",
+            Tip::Out => "out",
+            Tip::Control => "control",
+            Tip::Gate => "gate",
+        }
+    }
+    fn code(self) -> u8 {
+        match self {
+            Tip::In => 0,
+            Tip::Out => 1,
+            Tip::Control => 2,
+            Tip::Gate => 3,
+        }
+    }
+    fn of(c: u8) -> Option<Tip> {
+        [Tip::In, Tip::Out, Tip::Control, Tip::Gate].into_iter().find(|t| t.code() == c)
+    }
+    fn side(self) -> Side {
+        match self {
+            Tip::In => Side::L,
+            Tip::Out => Side::R,
+            Tip::Control => Side::T,
+            Tip::Gate => Side::B,
+        }
+    }
+}
+
+/// The page's own super, for drawing; and the page's edge as two ends of a program: what comes in at its left
+/// (a source, with only an out) and what goes out at its right (a sink, with only an in).
 const FRAME: usize = 99;
-const WIRES: [(usize, Side, usize, Side, bool); 11] = [
-    (FRAME, Side::L, S_SITE, Side::L, false),     // main◁ site◁
-    (S_SITE, Side::R, FRAME, Side::R, true),      // site▷ main▷
-    (S_SITE, Side::T, S_CONNECT, Side::T, false), // site△ Connect△
-    (S_SITE, Side::T, S_HOLD, Side::T, false),    // site△ hold△
-    (S_TOOLS, Side::R, S_EXPLORE, Side::L, true), // Tools▷ Explore◁
-    (S_EXPLORE, Side::R, S_LIBRARY, Side::L, true),
-    (S_LAB, Side::R, S_PROJECT, Side::L, true),
-    (S_EXPLORE, Side::B, S_LAB, Side::T, false), // Explore▽ Lab△
-    (S_LIBRARY, Side::B, S_PROJECT, Side::T, false),
-    (S_SAVE, Side::B, S_TOOLS, Side::T, false), // ctl:save▽ Tools△
-    (S_LOCK, Side::B, S_SITE, Side::T, false),  // ctl:lock▽ site△
+const PAGE_IN: usize = 97;
+const PAGE_OUT: usize = 98;
+
+/// A wire: from a node's out to another's tip.
+type WireT = (usize, usize, Tip);
+/// A pass: what arrives at one super's control or gate, passed on to another's.
+type PassT = (usize, Tip, usize, Tip);
+
+/// The start (pitechlab.sasm, `diagram`), in the language's terms.
+const START_WIRES: [WireT; 7] = [
+    (PAGE_IN, S_SITE, Tip::In),
+    (S_SITE, PAGE_OUT, Tip::In),
+    (S_TOOLS, S_EXPLORE, Tip::In),
+    (S_EXPLORE, S_LIBRARY, Tip::In),
+    (S_LAB, S_PROJECT, Tip::In),
+    (S_SAVE, S_TOOLS, Tip::Control),
+    (S_LOCK, S_SITE, Tip::Control),
+];
+const START_PASSES: [PassT; 4] = [
+    (S_SITE, Tip::Control, S_CONNECT, Tip::Control),
+    (S_SITE, Tip::Control, S_HOLD, Tip::Control),
+    (S_EXPLORE, Tip::Gate, S_LAB, Tip::Control),
+    (S_LIBRARY, Tip::Gate, S_PROJECT, Tip::Control),
 ];
 
-type WireT = (usize, Side, usize, Side);
-
-fn start_wires() -> Vec<WireT> {
-    WIRES.iter().map(|(a, sa, b, sb, _)| (*a, *sa, *b, *sb)).collect()
+fn is_ctl_super(id: usize) -> bool {
+    matches!(id, S_SAVE | S_LOCK | S_CHAIN | S_RESET)
 }
 
-fn side_code(x: Side) -> char {
-    match x {
-        Side::L => 'l',
-        Side::R => 'r',
-        Side::T => 't',
-        Side::B => 'b',
+/// The tips a node has: the page's edges one each; the title, the controls and the arrows only an out; every other
+/// super all four.
+fn tips_of(id: usize) -> &'static [Tip] {
+    match id {
+        PAGE_IN => &[Tip::Out],
+        PAGE_OUT => &[Tip::In],
+        S_TITLE | S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_LEFT | S_UP | S_DOWN | S_RIGHT => &[Tip::Out],
+        _ => &[Tip::In, Tip::Out, Tip::Control, Tip::Gate],
     }
 }
 
-fn side_of(c: &str) -> Option<Side> {
-    match c {
-        "l" => Some(Side::L),
-        "r" => Some(Side::R),
-        "t" => Some(Side::T),
-        "b" => Some(Side::B),
-        _ => None,
+fn has_tip(id: usize, tip: Tip) -> bool {
+    tips_of(id).contains(&tip)
+}
+
+/// Is there a path of wires (or passes) from `a` to `b`?
+fn reaches(s: &State, a: usize, b: usize) -> bool {
+    let (mut stack, mut seen) = (alloc::vec![a], Vec::new());
+    while let Some(n) = stack.pop() {
+        if n == b {
+            return true;
+        }
+        if !seen.contains(&n) {
+            seen.push(n);
+            stack.extend(s.wires.iter().filter(|w| w.0 == n).map(|w| w.1));
+            stack.extend(s.passes.iter().filter(|p| p.0 == n).map(|p| p.2));
+        }
     }
+    false
+}
+
+/// Has the super a gate already, wired or passed on to it?
+fn gated(s: &State, id: usize) -> bool {
+    s.wires.iter().any(|w| w.1 == id && w.2 == Tip::Gate) || s.passes.iter().any(|p| p.2 == id && p.3 == Tip::Gate)
+}
+
+/// Can `from`'s out be wired to `to`'s `tip`? Or why not.
+fn can_connect(s: &State, from: usize, to: usize, tip: Tip) -> Result<(), &'static str> {
+    if from == to {
+        return Err("a node can not feed itself");
+    }
+    if !has_tip(from, Tip::Out) {
+        return Err("the page's right edge has no out");
+    }
+    if tip == Tip::Out {
+        return Err("out is where a wire leaves, not where it arrives");
+    }
+    if !has_tip(to, tip) {
+        return Err(if to == PAGE_OUT { "the page's edge takes only an in" } else { "this super has no inputs" });
+    }
+    let ctl = is_ctl_super(from);
+    if tip == Tip::Control && !ctl {
+        return Err("only save, lock, chain or reset go into a control");
+    }
+    if tip != Tip::Control && ctl {
+        return Err("save, lock, chain and reset go into a control");
+    }
+    if tip == Tip::Gate {
+        return Err("a gate arrives passed on from another super's control or gate");
+    }
+    if s.wires.contains(&(from, to, tip)) {
+        return Err("already wired");
+    }
+    if reaches(s, to, from) {
+        return Err("that would make a loop");
+    }
+    Ok(())
+}
+
+/// Can what arrives at `from`'s `ft` be passed on to `to`'s `tt`? Or why not.
+fn can_relay(s: &State, from: usize, ft: Tip, to: usize, tt: Tip) -> Result<(), &'static str> {
+    for (id, tip) in [(from, ft), (to, tt)] {
+        if !matches!(tip, Tip::Control | Tip::Gate) {
+            return Err("only a control or a gate passes things on");
+        }
+        if !has_tip(id, tip) {
+            return Err("only a super's control and gate pass things on");
+        }
+    }
+    if from == to {
+        return Err("a super can not pass to itself");
+    }
+    if s.passes.contains(&(from, ft, to, tt)) {
+        return Err("already wired");
+    }
+    if tt == Tip::Gate && gated(s, to) {
+        return Err("a super has one gate");
+    }
+    if reaches(s, to, from) {
+        return Err("that would make a loop");
+    }
+    Ok(())
+}
+
+/// The nodes whose outs arrive at `id`'s `tip`: wired there, or passed on to it.
+fn arriving(s: &State, id: usize, tip: Tip, depth: u32) -> Vec<usize> {
+    let mut v: Vec<usize> = s.wires.iter().filter(|w| w.1 == id && w.2 == tip).map(|w| w.0).collect();
+    if depth < 32 {
+        for p in s.passes.iter().filter(|p| p.2 == id && p.3 == tip) {
+            v.extend(arriving(s, p.0, p.1, depth + 1));
+        }
+    }
+    v
 }
 
 fn wires_save() {
     let s = st();
-    let mut out = String::from("v1;");
-    for (a, sa, b, sb) in &s.wires {
-        out.push_str(&format!("{}{}-{}{};", a, side_code(*sa), b, side_code(*sb)));
+    let mut out = String::from("v2;");
+    for (a, b, t) in &s.wires {
+        out.push_str(&format!("w{}-{}-{};", a, b, t.code()));
+    }
+    for (a, ta, b, tb) in &s.passes {
+        out.push_str(&format!("p{}-{}-{}-{};", a, ta.code(), b, tb.code()));
     }
     host::store_set("piii:wires", &out);
 }
 
 fn wires_load() {
     let s = st();
-    s.wires = start_wires();
+    s.wires = START_WIRES.to_vec();
+    s.passes = START_PASSES.to_vec();
     let Some(v) = host::store_get("piii:wires") else { return };
     let mut it = v.split(';');
-    if it.next() != Some("v1") {
+    if it.next() != Some("v2") {
         return;
     }
-    let mut out = Vec::new();
-    for w in it.filter(|w| !w.is_empty()) {
-        let Some((a, b)) = w.split_once('-') else { continue };
-        let end = |e: &str| -> Option<(usize, Side)> {
-            let (n, c) = e.split_at(e.len().checked_sub(1)?);
-            let id: usize = n.parse().ok()?;
-            ((id < NSUP) || id == FRAME).then_some(())?;
-            Some((id, side_of(c)?))
-        };
-        if let (Some((a, sa)), Some((b, sb))) = (end(a), end(b)) {
-            out.push((a, sa, b, sb));
+    let ok = |id: usize| id < NSUP || id == PAGE_IN || id == PAGE_OUT;
+    let (mut ws, mut ps) = (Vec::new(), Vec::new());
+    for e in it.filter(|e| !e.is_empty()) {
+        let n: Vec<usize> = e[1..].split('-').filter_map(|x| x.parse().ok()).collect();
+        match (e.as_bytes()[0], n.as_slice()) {
+            (b'w', [a, b, t]) if ok(*a) && ok(*b) => {
+                if let Some(t) = Tip::of(*t as u8) {
+                    ws.push((*a, *b, t));
+                }
+            }
+            (b'p', [a, ta, b, tb]) if ok(*a) && ok(*b) => {
+                if let (Some(ta), Some(tb)) = (Tip::of(*ta as u8), Tip::of(*tb as u8)) {
+                    ps.push((*a, ta, *b, tb));
+                }
+            }
+            _ => {}
         }
     }
-    s.wires = out;
+    s.wires = ws;
+    s.passes = ps;
 }
 
-/// The supers wired to a control, at any of its ports.
-fn wired_to(s: &State, ctl: usize) -> Vec<usize> {
-    s.wires.iter().filter_map(|(a, _, b, _)| if *a == ctl { Some(*b) } else if *b == ctl { Some(*a) } else { None }).collect()
-}
-
-fn is_ctl_side(x: Side) -> bool {
-    matches!(x, Side::T | Side::B)
+/// Does a control have a wire out (it turns cobalt)?
+fn ctl_wired(s: &State, ctl: usize) -> bool {
+    s.wires.iter().any(|w| w.0 == ctl)
 }
 
 fn locked(s: &State, id: usize) -> bool {
-    s.locked || wired_to(s, S_LOCK).contains(&id)
+    s.locked || arriving(s, id, Tip::Control, 0).contains(&S_LOCK)
+}
+
+fn chain_on(s: &State, id: usize) -> bool {
+    s.chained || arriving(s, id, Tip::Control, 0).contains(&S_CHAIN)
 }
 
 fn name_of(id: usize) -> &'static str {
     match id {
         FRAME => "the page",
+        PAGE_IN => "the page's left edge",
+        PAGE_OUT => "the page's right edge",
         S_SITE => "the site",
         S_HOLD => "the holder",
         _ => sup_label(id),
     }
 }
 
-/// What a wire is being made from: a port of a super, or a bar of a bubble (which opens what it stands for).
+/// A bar of a bubble being dragged out: wherever it lands, what it stands for opens.
 #[derive(Clone, Copy)]
 pub enum From {
-    Port(usize, Side),
     Bar(usize, usize),
 }
 
@@ -465,9 +616,9 @@ fn svg_icon(paths: &[&str], size: &str, cls: &str) -> N {
 
 fn control_icon(id: usize, s: &State) -> N {
     match id {
-        S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if wired_to(s, S_SAVE).is_empty() { "ci" } else { "ci accent" }),
+        S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if ctl_wired(s, S_SAVE) { "ci accent" } else { "ci" }),
         S_LOCK => {
-            if s.locked || !wired_to(s, S_LOCK).is_empty() {
+            if s.locked || ctl_wired(s, S_LOCK) {
                 el("svg:svg")
                     .cls("ci accent")
                     .attr("viewBox", "0 0 24 24")
@@ -484,7 +635,7 @@ fn control_icon(id: usize, s: &State) -> N {
         S_CHAIN => svg_icon(
             &["M9 12h6", "M8 8H6.5a4 4 0 0 0 0 8H8", "M16 8h1.5a4 4 0 0 1 0 8H16"],
             "28",
-            if !wired_to(s, S_CHAIN).is_empty() { "ci accent" } else if s.chained { "ci" } else { "ci faint" },
+            if ctl_wired(s, S_CHAIN) { "ci accent" } else if s.chained { "ci" } else { "ci faint" },
         ),
         S_RESET => svg_icon(&["M4 4v6h6", "M4.6 15a8 8 0 1 0 1.9-8.3L4 10"], "24", "ci"),
         S_LEFT => svg_icon(&["M19 12H5", "M11 6l-6 6 6 6"], "26", "ci"),
@@ -593,62 +744,69 @@ fn scene_view(s: &State, mini: bool) -> N {
     } else {
         geo(s)
     };
-    // wires and ports, drawn under the supers
-    let mut wires = el("svg:svg").cls("wires").attr("aria-hidden", "true").attr("width", "1").attr("height", "1");
-    for (i, (a, sa, b, sb)) in s.wires.iter().enumerate() {
-        let (a, sa, b, sb) = (*a, *sa, *b, *sb);
-        let data = sa == Side::R || sb == Side::R; // out of an output
-        let (pa, pb) = (port(&g, a, sa), port(&g, b, sb));
-        let d = if data && sa == Side::R && sb == Side::L { step(pa, pb) } else { curve(pa, sa, pb, sb) };
-        let sel = !mini && s.wire_sel == Some(i);
-        if !mini {
-            // a wide, invisible stroke to take the click
-            wires = wires.kid(
-                el("svg:path")
-                    .cls("w-hit")
-                    .attr("data-stop", "1")
-                    .attr("d", d.clone())
-                    .on("click", Msg::WireSel(i as u8))
-                    .on("dblclick", Msg::WireDel(i as u8)),
-            );
-        }
-        wires = wires.kid(el("svg:path").cls(if data { "w data" } else { "w" }).cls_if(sel, "sel").attr("d", d));
+    // wires, drawn under the supers; their ports over them
+    let mut wires = el("svg:svg").cls("wires").attr("aria-hidden", "true").attr("width", "1").attr("height", "1").kid(
+        el("svg:defs")
+            .kid(arrowhead("ah-flow", "flow"))
+            .kid(arrowhead("ah-ink", "ink")),
+    );
+    let nw = s.wires.len();
+    for (i, (a, b, tip)) in s.wires.iter().enumerate() {
+        let (a, b, tip) = (*a, *b, *tip);
+        let (px, py) = leave_point(&g, a, tip);
+        let (qx, qy) = tip_point(&g, b, tip);
+        let d = match tip {
+            Tip::In | Tip::Out => {
+                // the ins of one tip share a bus, halfway from the furthest of them
+                let reach = s.wires.iter().filter(|w| w.1 == b && w.2 == Tip::In).map(|w| leave_point(&g, w.0, Tip::In).0).fold(px, f64::max);
+                let bus = (reach + qx) / 2.0;
+                format!("M{:.1},{:.1} H{:.1} V{:.1} H{:.1}", px, py, bus, qy, qx)
+            }
+            _ => format!("M{:.1},{:.1} V{:.1} H{:.1} V{:.1}", px, py, (py + qy) / 2.0, qx, qy),
+        };
+        wires = draw_link(wires, mini, s.wire_sel == Some(i), i, &d, tip);
+    }
+    for (j, (a, ta, b, tb)) in s.passes.iter().enumerate() {
+        let (a, ta, b, tb) = (*a, *ta, *b, *tb);
+        let ((px, py), (qx, qy)) = (tip_point(&g, a, ta), tip_point(&g, b, tb));
+        // out of its tip (up from a control, down from a gate), round by a lane left of both, and into the other tip
+        // from outside, clear of everything between
+        let away = |t: Tip| if t == Tip::Control { -40.0 } else { 40.0 };
+        let left = |id: usize| if id < NSUP { g.rects[id].0 } else { px.min(qx) };
+        let lane = left(a).min(left(b)) - 60.0;
+        let d = format!(
+            "M{:.1},{:.1} V{:.1} H{:.1} V{:.1} H{:.1} V{:.1}",
+            px,
+            py,
+            py + away(ta),
+            lane,
+            qy + away(tb),
+            qx,
+            qy
+        );
+        wires = draw_link(wires, mini, s.wire_sel == Some(nw + j), nw + j, &d, tb);
     }
     if let (false, Some(w)) = (mini, s.wiring.as_ref()) {
-        let (pa, sa) = match w.from {
-            From::Port(id, side) => (port(&g, id, side), side),
-            From::Bar(gi, _) => {
-                let sup = GROUPS[gi].sup;
-                (port(&g, sup, Side::R), Side::R)
-            }
-        };
+        let From::Bar(gi, _) = w.from;
+        let pa = port(&g, GROUPS[gi].sup, Side::R);
         let d = match w.to {
-            Some((id, side)) => curve(pa, sa, port(&g, id, side), side),
-            None => {
-                let back = match sa {
-                    Side::L => Side::R,
-                    Side::R => Side::L,
-                    Side::T => Side::B,
-                    Side::B => Side::T,
-                };
-                curve(pa, sa, w.at, back)
-            }
+            Some((id, side)) => curve(pa, Side::R, port(&g, id, side), side),
+            None => curve(pa, Side::R, w.at, Side::L),
         };
         wires = wires.kid(el("svg:path").cls("w-temp").attr("d", d));
     }
-    let mut stars = String::new();
-    let r = if mini { 3.2 / g.k } else if g.w < 700.0 { 5.5 } else { 8.5 / g.k.max(0.6) };
-    for id in 0..NSUP {
-        for side in [Side::L, Side::R, Side::T, Side::B] {
-            let (x, y) = port(&g, id, side);
-            stars.push_str(&star(x, y, r));
-        }
+    if let (false, Some((a, ta))) = (mini, s.held_port) {
+        let (x1, y1) = if ta == Tip::Out { leave_point(&g, a, Tip::In) } else { tip_point(&g, a, ta) };
+        wires = wires.kid(
+            el("svg:line")
+                .cls("w-temp")
+                .attr("x1", format!("{:.1}", x1))
+                .attr("y1", format!("{:.1}", y1))
+                .attr("x2", format!("{:.1}", s.pend_at.0))
+                .attr("y2", format!("{:.1}", s.pend_at.1)),
+        );
     }
-    for side in [Side::L, Side::R, Side::T, Side::B] {
-        let (x, y) = port(&g, FRAME, side);
-        stars.push_str(&star(x, y, r));
-    }
-    wires = wires.kid(el("svg:path").cls("ports").attr("d", stars));
+    let ports_svg = ports_view(s, &g, mini);
 
     let mut stage = el("div")
         .cls("stage")
@@ -696,6 +854,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         }
         stage = stage.kid(sx);
     }
+    stage = stage.kid(ports_svg);
     if mini {
         let (w, h) = float_size();
         return el("aside")
@@ -709,13 +868,236 @@ fn scene_view(s: &State, mini: bool) -> N {
     }
     el("div")
         .cls("scene")
-        .cls_if(s.wiring.is_some(), "wiring")
+        .cls_if(s.wiring.is_some() || s.held_port.is_some(), "wiring")
         .on("click", Msg::WireSel(255))
         .kid(el("div").cls("frame"))
         .kid(stage)
         .kid_if(!s.note.is_empty(), || el("div").cls("wire-note").attr("role", "status").text(s.note.clone()).into())
         .kid(footer())
         .into()
+}
+
+/// Where a node's tip is: the page's edges at the page's sides, a super's at its extreme points.
+fn tip_point(g: &Geo, id: usize, tip: Tip) -> (f64, f64) {
+    match id {
+        PAGE_IN => port(g, FRAME, Side::L),
+        PAGE_OUT => port(g, FRAME, Side::R),
+        _ => port(g, id, tip.side()),
+    }
+}
+
+/// Where a wire into `into` leaves its node: a control's bottom into a control tip (it hangs from above); else the
+/// node's out.
+fn leave_point(g: &Geo, id: usize, into: Tip) -> (f64, f64) {
+    if is_ctl_super(id) && into == Tip::Control {
+        port(g, id, Side::B)
+    } else {
+        tip_point(g, id, Tip::Out)
+    }
+}
+
+fn arrowhead(id: &'static str, cls: &'static str) -> N {
+    el("svg:marker")
+        .attr("id", id)
+        .attr("viewBox", "0 0 10 10")
+        .attr("refX", "10")
+        .attr("refY", "5")
+        .attr("markerUnits", "userSpaceOnUse")
+        .attr("markerWidth", "16")
+        .attr("markerHeight", "16")
+        .attr("orient", "auto")
+        .kid(el("svg:path").cls(format!("head {}", cls).as_str()).attr("d", "M0,0L10,5L0,10Z"))
+        .into()
+}
+
+/// A wire or pass on the canvas: its kind by where it arrives (flow into in, control, gate), an arrowhead, and on
+/// the whole canvas a wider unseen line over it to take the click.
+fn draw_link(mut wires: crate::dom::El<Msg>, mini: bool, sel: bool, i: usize, d: &str, arrives: Tip) -> crate::dom::El<Msg> {
+    let kind = match arrives {
+        Tip::In | Tip::Out => "flow",
+        Tip::Control => "control",
+        Tip::Gate => "gate",
+    };
+    wires = wires.kid(
+        el("svg:path")
+            .cls("w")
+            .cls(kind)
+            .cls_if(sel, "sel")
+            .attr("d", d)
+            .attr("marker-end", if kind == "flow" { "url(#ah-flow)" } else { "url(#ah-ink)" }),
+    );
+    if !mini {
+        wires = wires.kid(
+            el("svg:path")
+                .cls("w-hit")
+                .attr("data-stop", "1")
+                .attr("d", d)
+                .on("click", Msg::WireSel(i as u8))
+                .on("dblclick", Msg::WireDel(i as u8)),
+        );
+    }
+    wires
+}
+
+/// A small sparkle (n = ½) of radius r: a port's mark.
+fn sparkle(cx: f64, cy: f64, r: f64) -> String {
+    let mut d = String::new();
+    for i in 0..48 {
+        let t = i as f64 / 48.0 * core::f64::consts::TAU;
+        let (c, sn) = (libm_cos(t), libm_cos(t - core::f64::consts::FRAC_PI_2));
+        // |x/r|^½ + |y/r|^½ = 1: x = r·sign(c)·c⁴
+        let x = cx + r * c.signum() * (c * c) * (c * c);
+        let y = cy + r * sn.signum() * (sn * sn) * (sn * sn);
+        d.push_str(&format!("{}{:.2},{:.2}", if i == 0 { "M" } else { "L" }, x, y));
+    }
+    d.push('Z');
+    d
+}
+
+/// cos without the standard library: a short series after folding into [-π, π].
+fn libm_cos(x: f64) -> f64 {
+    let tau = core::f64::consts::TAU;
+    let mut x = x % tau;
+    if x > core::f64::consts::PI {
+        x -= tau;
+    } else if x < -core::f64::consts::PI {
+        x += tau;
+    }
+    let x2 = x * x;
+    let (mut term, mut sum, mut k) = (1.0, 1.0, 0.0);
+    while k < 20.0 {
+        term *= -x2 / ((k + 1.0) * (k + 2.0));
+        sum += term;
+        k += 2.0;
+    }
+    sum
+}
+
+/// The ports to wire with, over everything: each node's out (filled), its tips (drawn round); while a wire is being
+/// made, the tips it may join are marked.
+fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
+    let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 7.0 } else { 10.0 / g.k.max(0.6) };
+    let mut svg = el("svg:svg").cls("ports-svg").attr("width", "1").attr("height", "1").attr("aria-hidden", if mini { "true" } else { "false" });
+    let mut nodes: Vec<usize> = (0..NSUP).collect();
+    nodes.push(PAGE_IN);
+    nodes.push(PAGE_OUT);
+    for id in nodes {
+        for &tip in tips_of(id) {
+            let (x, y) = if tip == Tip::Out { leave_point(g, id, if is_ctl_super(id) { Tip::Control } else { Tip::In }) } else { tip_point(g, id, tip) };
+            let on = s.held_port == Some((id, tip));
+            let target = !mini
+                && match s.held_port {
+                    Some((a, Tip::Out)) => tip != Tip::Out && can_connect(s, a, id, tip).is_ok(),
+                    Some((a, ta)) => matches!(tip, Tip::Control | Tip::Gate) && can_relay(s, a, ta, id, tip).is_ok(),
+                    None => false,
+                };
+            let mut gp = el("svg:g")
+                .attr("data-p", format!("{}-{}", id, tip.name()))
+                .cls("port")
+                .cls(if tip == Tip::Out { "out" } else { "tip" })
+                .cls_if(on, "on")
+                .cls_if(target, "target")
+                .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, r)));
+            if !mini {
+                gp = gp
+                    .attr("data-stop", "1")
+                    .on("click", Msg::Port(id as u8, tip.code()))
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 1.4)))
+                    .kid(el("svg:title").text(format!("{}: {}", name_of(id), match tip {
+                        Tip::Out => "out. Click, then click a tip",
+                        Tip::In => "in",
+                        Tip::Control => "control. Click, then another super's control or gate to pass it on",
+                        Tip::Gate => "gate. Click, then another super's control or gate to pass it on",
+                    })));
+            }
+            svg = svg.kid(gp);
+        }
+    }
+    svg.into()
+}
+
+/// A click on a port: the first one held, the second one wired to it (or the reason it can not be).
+fn port_click(id: usize, tip: Tip) {
+    let s = st();
+    let Some((a, ta)) = s.held_port else {
+        match tip {
+            Tip::In => note("In is where a wire arrives: click an out first, then this".to_string()),
+            _ => {
+                s.wire_sel = None;
+                s.held_port = Some((id, tip));
+                let g = geo(s);
+                s.pend_at = tip_point(&g, id, tip);
+                host::capture(true);
+            }
+        }
+        return;
+    };
+    s.held_port = None;
+    host::capture(false);
+    if (a, ta) == (id, tip) {
+        return;
+    }
+    if ta == Tip::Out && tip != Tip::Out {
+        match can_connect(s, a, id, tip) {
+            Err(e) => note(format!("Not wired: {}", e)),
+            Ok(()) => {
+                s.wires.push((a, id, tip));
+                wires_save();
+                let msg = match a {
+                    S_RESET => {
+                        if id < NSUP {
+                            s.offs[id] = (0.0, 0.0);
+                            for h in held_by(id) {
+                                s.offs[*h] = (0.0, 0.0);
+                            }
+                            layout_save();
+                        }
+                        format!("Back where it started: {}", name_of(id))
+                    }
+                    S_LOCK => format!("Locked: {} stays where it is while this wire is there", name_of(id)),
+                    S_CHAIN => format!("Chained: {} brings what it holds", name_of(id)),
+                    S_SAVE => {
+                        layout_save();
+                        format!("Kept: {}", name_of(id))
+                    }
+                    _ => format!("Wired {}'s out to {}'s {}", name_of(a), name_of(id), tip.name()),
+                };
+                note(msg);
+            }
+        }
+    } else if ta != Tip::Out && matches!(tip, Tip::Control | Tip::Gate) {
+        match can_relay(s, a, ta, id, tip) {
+            Err(e) => note(format!("Not passed on: {}", e)),
+            Ok(()) => {
+                s.passes.push((a, ta, id, tip));
+                wires_save();
+                note(format!("What arrives at {}'s {} passes on to {}'s {}", name_of(a), ta.name(), name_of(id), tip.name()));
+            }
+        }
+    } else if tip == Tip::Out {
+        s.held_port = Some((id, tip));
+        let g = geo(s);
+        s.pend_at = tip_point(&g, id, tip);
+        host::capture(true);
+    } else {
+        note("Not wired: a wire leaves from an out and arrives at an in, a control or a gate".to_string());
+    }
+}
+
+/// Takes away a wire (or a pass: they are numbered after the wires).
+fn remove_link(i: usize) {
+    let s = st();
+    let nw = s.wires.len();
+    if i < nw {
+        s.wires.remove(i);
+    } else if i - nw < s.passes.len() {
+        s.passes.remove(i - nw);
+    } else {
+        return;
+    }
+    s.wire_sel = None;
+    wires_save();
+    note("Wire taken away".to_string());
 }
 
 // ---------------------------------------------------------------------------------------------- dragging and opening
@@ -737,38 +1119,20 @@ fn begin_drag(id: usize, at: &str) {
     let x: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let y: f64 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let g = geo(s);
-    let p = ((x - g.ox) / g.k, (y - g.oy) / g.k);
-    if s.pend_member.is_none() {
-        if let Some(side) = edge_at(&g, id, p) {
-            s.wire_sel = None;
-            s.wiring = Some(Wiring { from: From::Port(id, side), at: p, to: None });
-            host::capture(true);
-            render();
-            return;
-        }
+    if s.held_port.is_some() {
+        // a wire is being made: a press on a super lets it go
+        s.held_port = None;
+        host::capture(false);
+        render();
+        return;
     }
     let mut ids = alloc::vec![id];
-    if s.chained {
+    if chain_on(s, id) {
         ids.extend_from_slice(held_by(id));
     }
     let start = ids.iter().map(|i| (*i, s.offs[*i])).collect();
     s.drag = Some(Drag { id, member: s.pend_member.take(), sx: x, sy: y, k: g.k, moved: false, start, pan0: s.pan });
     host::capture(true);
-}
-
-/// The side of a super a press is on, when it is on its edge (or on one of its ports).
-fn edge_at(g: &Geo, id: usize, p: (f64, f64)) -> Option<Side> {
-    let (x, y, w, h) = g.rects[id];
-    let band = (10.0 / g.k).min(w / 4.0).min(h / 4.0).max(3.0);
-    let port_r = 13.0 / g.k;
-    for side in [Side::L, Side::R, Side::T, Side::B] {
-        let (px, py) = port(g, id, side);
-        if (p.0 - px).abs() + (p.1 - py).abs() <= port_r {
-            return Some(side);
-        }
-    }
-    let d = [(p.0 - x, Side::L), (x + w - p.0, Side::R), (p.1 - y, Side::T), (y + h - p.1, Side::B)];
-    d.iter().filter(|(v, _)| *v >= -band && *v <= band).min_by(|a, b| a.0.abs().partial_cmp(&b.0.abs()).unwrap_or(core::cmp::Ordering::Equal)).map(|(_, s)| *s)
 }
 
 /// The super under a point (the topmost), the site when only the site is there, the page near its edge.
@@ -821,11 +1185,9 @@ fn wiring_move(x: f64, y: f64) {
     let p = ((x - g.ox) / g.k, (y - g.oy) / g.k);
     let Some(w) = s.wiring.as_mut() else { return };
     w.at = p;
-    let (own, ctl) = match w.from {
-        From::Port(id, side) => (Some(id), Some(is_ctl_side(side))),
-        From::Bar(gi, _) => (Some(GROUPS[gi].sup), None),
-    };
-    w.to = sup_at(&g, p).filter(|t| Some(*t) != own).map(|t| (t, side_for(&g, t, p, ctl)));
+    let From::Bar(gi, _) = w.from;
+    let own = GROUPS[gi].sup;
+    w.to = sup_at(&g, p).filter(|t| *t != own).map(|t| (t, side_for(&g, t, p, None)));
 }
 
 fn note(text: String) {
@@ -838,52 +1200,10 @@ fn wiring_end() {
     let s = st();
     let Some(w) = s.wiring.take() else { return };
     let Some((b, sb)) = w.to else { return };
-    match w.from {
-        From::Bar(gi, m) => {
-            note(format!("Opened {}: wired to {}", GROUPS[gi].members[m].0, name_of(b)));
-            open_member(gi, m);
-        }
-        From::Port(a, sa) => {
-            if a == b {
-                return;
-            }
-            if is_ctl_side(sa) != is_ctl_side(sb) {
-                note("Not joined: sync and condition join sync and condition".to_string());
-                return;
-            }
-            // wiring a super to reset is the reset: it goes back where it started
-            if a == S_RESET || b == S_RESET {
-                let t = if a == S_RESET { b } else { a };
-                if t < NSUP {
-                    s.offs[t] = (0.0, 0.0);
-                    for h in held_by(t) {
-                        s.offs[*h] = (0.0, 0.0);
-                    }
-                    layout_save();
-                }
-                note(format!("Back where it started: {}", name_of(t)));
-                return;
-            }
-            let dup = s.wires.iter().any(|(x, xs, y, ys)| (*x == a && *xs == sa && *y == b && *ys == sb) || (*x == b && *xs == sb && *y == a && *ys == sa));
-            if dup {
-                return;
-            }
-            s.wires.push((a, sa, b, sb));
-            wires_save();
-            let other = |c: usize| if a == c { Some(b) } else if b == c { Some(a) } else { None };
-            let msg = if let Some(t) = other(S_LOCK) {
-                format!("Locked: {} stays where it is while this wire is there", name_of(t))
-            } else if let Some(t) = other(S_CHAIN) {
-                format!("Chained: {} brings what it holds", name_of(t))
-            } else if let Some(t) = other(S_SAVE) {
-                layout_save();
-                format!("Kept: {}", name_of(t))
-            } else {
-                format!("Wired {} to {}", name_of(a), name_of(b))
-            };
-            note(msg);
-        }
-    }
+    let From::Bar(gi, m) = w.from;
+    note(format!("Opened {}: wired to {}", GROUPS[gi].members[m].0, name_of(b)));
+    let _ = sb;
+    open_member(gi, m);
 }
 
 pub fn on_key(key: &str) {
@@ -891,16 +1211,13 @@ pub fn on_key(key: &str) {
     match key {
         "Escape" => {
             s.wiring = None;
+            s.held_port = None;
             s.wire_sel = None;
             host::capture(false);
         }
         "Delete" | "Backspace" => {
-            if let Some(i) = s.wire_sel.take() {
-                if i < s.wires.len() {
-                    s.wires.remove(i);
-                    wires_save();
-                    note("Wire removed".to_string());
-                }
+            if let Some(i) = s.wire_sel {
+                remove_link(i);
             }
         }
         _ => return,
@@ -910,6 +1227,15 @@ pub fn on_key(key: &str) {
 
 pub fn on_pointer(phase: u32, x: f64, y: f64) {
     let s = st();
+    if s.held_port.is_some() {
+        // a wire being made follows the pointer until a tip is clicked
+        if phase == 0 {
+            let g = geo(s);
+            s.pend_at = ((x - g.ox) / g.k, (y - g.oy) / g.k);
+            render();
+        }
+        return;
+    }
     if s.wiring.is_some() {
         match phase {
             0 => wiring_move(x, y),
@@ -1025,8 +1351,10 @@ fn activate(id: usize, member: Option<u8>) {
             s.locked = false;
             s.chained = true;
             s.open.clear();
-            s.wires = start_wires();
+            s.wires = START_WIRES.to_vec();
+            s.passes = START_PASSES.to_vec();
             s.wire_sel = None;
+            s.held_port = None;
             host::store_del("piii:layout");
             host::store_del("piii:wires");
         }

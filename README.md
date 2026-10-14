@@ -6,7 +6,7 @@ Live at https://www.piii.app/
 
 ## Objectives
 
-- **Graphical.** The lab is a canvas of supers and wires, not a stack of pages. You drag the supers, wire them together, lock and save the layout, and open any one to work in it. Every super has the same shape, a superellipse with n = 50.
+- **Graphical.** The lab is a canvas of supers and wires, not a stack of pages. You drag the supers, wire them together, lock and save the layout, and open any one to work in it. Every super has the same shape, a superellipse with n = π.
 - **Built in Rust.** The site is Rust compiled to WebAssembly, with no HTML files, no frameworks and no dependencies: `core` and `alloc` only. It draws every view, word and style itself. A few lines of JavaScript (`front/app/host.js`) lend it the page.
 - **Science first.** The lab's first instrument is **ScholarPi**, which assesses research papers. A panel of independent AI models reads a manuscript. Deterministic checks audit its references, reproducibility and integrity. It is scored on eight open criteria (the **piX** index), and the report shows what holds it back. Each assessment is recorded on a Proof-of-Research ledger and earns **piQ**, a soulbound token.
 - **Open and accountable.** The rubric and every weight are published (`/api/rubric`). The h-index and venue prestige are reported but never scored. Nothing optional happens before you choose (`/api/cookies`).
@@ -24,9 +24,17 @@ Live at https://www.piii.app/
                  [←] [↑]  [↓] [→]
 ```
 
-Magenta wires carry data out of an output (▷ into ◁). Ink wires are sync (△) and condition (▽).
+Wiring follows the superellipse language (github.com/ex-tern/superellipse). Every super has four terminals at its extreme points: **out** on the right, where a wire leaves, and **in** (left), **control** (top) and **gate** (bottom), where wires arrive. Data flows from left to right.
 
-To wire, press a super's edge or one of its ports and drag to another super. To remove a wire, click it and press Delete, or double-click it. Dragging a bar out of a bubble opens what it stands for. A wire into lock, chain or save locks, chains or keeps that super. Wiring a super to reset puts it back where it started. When a super is open, the canvas floats on top of it; click π to return to the whole canvas.
+- **To wire:** click an out, then a tip.
+- **To pass on:** click a control or a gate, then another super's control or gate. What arrives at the first is passed on to the second.
+- **To let go:** press Esc, or click anywhere else.
+- **To remove a wire:** double-click it, or click it and press Delete.
+- **Refusals:** a wire that makes no sense is refused, with the reason. For example, a node can not feed itself, a super has one gate, or that would make a loop.
+- **The controls:** save, lock, chain and reset feed a super's control. Whatever arrives there, wired or passed on, acts on that super: lock keeps it in place, chain makes it bring what it holds, save keeps the layout, and reset puts it back where it started.
+- **How wires look:** flow wires (into an in) are magenta, control wires dashed, gate wires dotted, and each ends in an arrowhead. The ins of one tip share a bus.
+
+When a super is open, the canvas floats on top of it and the other supers wait as icons; click π to return to the whole canvas.
 
 The project map (`#/map`) shows the whole lab in the same notation: one prompt fanned out to every engine, and the assessment from manuscript to ledger.
 

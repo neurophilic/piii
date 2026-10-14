@@ -83,6 +83,7 @@ enum Msg {
     Activate(u8),
     WireSel(u8),
     WireDel(u8),
+    Port(u8, u8),
 }
 
 impl crate::dom::Fill for Msg {
@@ -226,6 +227,9 @@ struct State {
     item: Slot,
     item_key: (u8, u8),
     wires: Vec<WireT>,
+    passes: Vec<PassT>,
+    held_port: Option<(usize, Tip)>,
+    pend_at: (f64, f64),
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
     note: String,
@@ -331,6 +335,9 @@ pub fn start() {
         item: Slot::default(),
         item_key: (255, 255),
         wires: Vec::new(),
+        passes: Vec::new(),
+        held_port: None,
+        pend_at: (0.0, 0.0),
         wire_sel: None,
         wiring: None,
         note: String::new(),
@@ -1171,20 +1178,22 @@ fn update(msg: Msg) {
         Msg::PDown(id, xy) => begin_drag(id as usize, &xy),
         Msg::PMember(m) => s.pend_member = Some(m),
         Msg::Activate(id) => activate(id as usize, None),
+        Msg::Port(id, t) => {
+            if let Some(tip) = Tip::of(t) {
+                port_click(id as usize, tip);
+            }
+        }
         Msg::WireSel(i) => {
+            if i == 255 && s.held_port.is_some() {
+                s.held_port = None;
+                host::capture(false);
+            }
             s.wire_sel = if i == 255 || s.wire_sel == Some(i as usize) { None } else { Some(i as usize) };
             if s.wire_sel.is_some() {
                 note("Wire selected: press Delete to remove it".to_string());
             }
         }
-        Msg::WireDel(i) => {
-            if (i as usize) < s.wires.len() {
-                s.wires.remove(i as usize);
-                s.wire_sel = None;
-                wires_save();
-                note("Wire removed".to_string());
-            }
-        }
+        Msg::WireDel(i) => remove_link(i as usize),
         Msg::Retry => {
             for slot in [&mut s.summary, &mut s.rubric, &mut s.dossier, &mut s.piq, &mut s.mine, &mut s.topics, &mut s.live, &mut s.req, &mut s.item] {
                 if slot.err.is_some() {
