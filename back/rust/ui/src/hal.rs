@@ -83,6 +83,10 @@ pub struct Hal {
     dac_w: usize,
     dac_r: usize,
     rx: alloc::collections::VecDeque<u8>,
+    /// bytes the line may still deliver in this slice of time: a UART runs at a baud rate, and the kernel only
+    /// renders between bursts, so an unthrottled line would leave it decoding forever
+    rx_budget: f64,
+    rx_t: f64,
     vdirty: bool,
     weights: Vec<u8>,
     rgba: Vec<u8>,
@@ -113,6 +117,7 @@ struct Portal {
     readback: Option<Vec<u8>>,
     dump: Option<Vec<u8>>,
     dump_since: f64,
+    dump_wait: bool,
     rb_note: String,
     hint: String,
     chan_keys: bool,
@@ -1216,8 +1221,11 @@ impl Hal {
     // -------------------------------------------------------------- ports
     fn port_in(&mut self, port: u16) -> u8 {
         match port {
-            0x3FD => 0x60 | (!self.rx.is_empty()) as u8,
-            0x3F8 => self.rx.pop_front().unwrap_or(0),
+            0x3FD => 0x60 | (!self.rx.is_empty() && self.rx_budget >= 1.0) as u8,
+            0x3F8 => {
+                self.rx_budget -= 1.0;
+                self.rx.pop_front().unwrap_or(0)
+            }
             0x3FA => 0x01,
             0x60 => self.keys.first().map(|k| k.1).unwrap_or(0),
             0x64 => 0x1C,
@@ -1671,7 +1679,7 @@ impl Hal {
 
     /// Sender._run() of portal.py: one frame of the chosen source, as a delta against what the guest last saw.
     fn portal_tick(&mut self) {
-        if !self.net || self.p.dump.is_some() {
+        if !self.net || self.p.dump.is_some() || self.p.dump_wait {
             return;
         }
         let now = host::now();
@@ -2049,6 +2057,17 @@ fn hal_tick() -> bool {
         h.p.dump = None;
         h.readback_done(None);
     }
+    let now = host::now();
+    if h.rx_t > 0.0 {
+        h.rx_budget = (h.rx_budget + (now - h.rx_t) * 16.0).min(4096.0);
+    }
+    h.rx_t = now;
+    if h.p.dump_wait && h.rx.is_empty() {
+        h.p.dump_wait = false;
+        h.p.dump = Some(Vec::with_capacity(SLOTS));
+        h.p.dump_since = now;
+        h.send(&[0xFF, 0xFF, 0x01, 0x00]);
+    }
     h.portal_tick();
     if !h.halted && !(h.waiting && h.keys.is_empty()) {
         h.waiting = false;
@@ -2206,13 +2225,10 @@ fn hal_update(a: u16, v: String) {
         }
         19 => {
             // read back what the network paints: let the line drain, then ask for a dump
-            if h.p.dump.is_none() && h.net {
-                h.rx.clear();
-                h.p.prev = None;
+            if h.p.dump.is_none() && !h.p.dump_wait && h.net {
+                h.p.armed = false;
                 h.p.rb_note = "reading back…".into();
-                h.p.dump = Some(Vec::with_capacity(SLOTS));
-                h.p.dump_since = host::now();
-                h.send(&[0xFF, 0xFF, 0x01, 0x00]);
+                h.p.dump_wait = true;
             }
         }
         20 => {
@@ -2393,7 +2409,7 @@ fn hal_view(s: &State) -> N {
                                 .kid(el("figure").kid(el("canvas").cls("hal-preview").attr("width", "320").attr("height", "200")).kid(el("figcaption").text("last frame sent")))
                                 .kid(el("figure").kid(el("canvas").cls("hal-readback").attr("width", "320").attr("height", "200")).kid(el("figcaption").text(p.rb_note.clone().or_text("readback")))),
                         )
-                        .kid(el("button").attr("type", "button").cls("btn small").attr_if(p.dump.is_some(), "disabled", "").on("click", Msg::T(Tool::Hal, 19, String::new())).text("Read back and score")),
+                        .kid(el("button").attr("type", "button").cls("btn small").attr_if(p.dump.is_some() || p.dump_wait, "disabled", "").on("click", Msg::T(Tool::Hal, 19, String::new())).text("Read back and score")),
                 )
                 .kid(
                     el("div")
