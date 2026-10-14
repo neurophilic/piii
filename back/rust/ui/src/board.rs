@@ -14,6 +14,8 @@ pub struct Board {
     /// growth of each node by the middle button
     sizes: Vec<(f64, f64)>,
     sel: Option<usize>,
+    /// the super a single click selected
+    picked: Option<usize>,
     held: Option<usize>,
     /// where the pointer is while a wire is being made, for the wire that follows it
     at: Option<(f64, f64)>,
@@ -234,6 +236,7 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
                     board_open(gi, node);
                 } else {
                     s.last_tap = (10_000 + node, None, now);
+                    board(gi).picked = Some(node);
                 }
             }
         }
@@ -349,6 +352,9 @@ fn board_update(a: u16, v: String) {
             let b = board(gi);
             let i = nums.first().copied().unwrap_or(-1.0);
             b.sel = if i < 0.0 { None } else { Some(i as usize) };
+            if i < 0.0 && host::now() - st().last_tap.2 > 120.0 {
+                b.picked = None;
+            }
             b.held = None;
         }
         // a double click on the bare board: client x, y, then x, y within it
@@ -468,6 +474,7 @@ fn group_board(gi: usize) -> N {
         nodes.push(
             el("div")
                 .cls("member bnode")
+                .cls_if(b.picked == Some(m), "picked")
                 .cls_if(pien, "pien")
                 .attr_if(pien, "title", "PiEN suggests this next")
                 .attr("role", "link")
@@ -484,7 +491,7 @@ fn group_board(gi: usize) -> N {
     for (k, (kind, _, _, label)) in b.extra.iter().enumerate() {
         let i = b.pos.len() + k;
         let (x, y, bw, bh) = bnode(&b, i);
-        let base = el("div").cls("bnode").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
+        let base = el("div").cls("bnode").cls_if(b.picked == Some(i), "picked").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
         nodes.push(if *kind == 0 {
             base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-22 -22 44 44").attr("width", "44").attr("height", "44").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 18.0)))).into()
         } else {

@@ -364,6 +364,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+.sx.picked,.bnode.picked{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 0 0 7px var(--accent-soft)}
 /* wiring: the pointer says what a click will do (owner, 2026-10-14: "improve the wiring experience with pointer change") */
 .ports-svg .port.out{cursor:crosshair}.ports-svg .port.tip{cursor:help}
 .scene.wiring,.scene.wiring .sx,.board.holding,.board.holding .bnode{cursor:crosshair}

@@ -254,6 +254,8 @@ struct State {
     /// what is open was opened by a double click on the canvas: it takes 70% of it, the canvas live around it
     peek: bool,
     peek_next: bool,
+    /// the super a single click selected (owner, 2026-10-14: "one click selects a super, double click opens it")
+    sup_pick: Option<usize>,
     /// the open window's size when it was resized by its corner (or the middle button on its head)
     win_size: Option<(f64, f64)>,
     win_drag: Option<(f64, f64, f64, f64, u8)>,
@@ -395,6 +397,7 @@ pub fn start() {
         last_tap: (usize::MAX, None, 0.0),
         peek: false,
         peek_next: false,
+        sup_pick: None,
         win_size: None,
         win_drag: None,
         pend_at: (0.0, 0.0),
@@ -1374,6 +1377,10 @@ fn update(msg: Msg) {
             if i == 255 && s.held_port.is_some() {
                 s.held_port = None;
                 host::capture(false);
+            }
+            // a click on the bare canvas lets the selection go (the click that just selected a super bubbles here too)
+            if i == 255 && host::now() - s.last_tap.2 > 120.0 {
+                s.sup_pick = None;
             }
             s.wire_sel = if i == 255 || s.wire_sel == Some(i as usize) { None } else { Some(i as usize) };
             if s.wire_sel.is_some() {

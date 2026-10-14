@@ -921,6 +921,7 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls_if(mini && id == lit(s), "lit")
             .cls_if(!mini && s.wiring.as_ref().and_then(|w| w.to).map(|(t, _)| t == id).unwrap_or(false), "wire-target")
             .cls_if(!mini && locked(s, id) && id >= S_WELCOME, "locked")
+            .cls_if(!mini && s.sup_pick == Some(id), "picked")
             .attr("data-s", format!("{}", id))
             .attr_if(id != S_PROG && id != S_HOLD, "data-solid", "1")
             .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
@@ -1373,6 +1374,9 @@ pub fn on_key(key: &str) -> bool {
         return true;
     }
     match key {
+        "Escape" if s.sup_pick.is_some() && s.modal.is_none() && s.held_port.is_none() => {
+            s.sup_pick = None;
+        }
         "Escape" => {
             if s.modal.is_some() {
                 s.modal = None;
@@ -1558,6 +1562,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                     activate(d.id, d.member);
                 } else {
                     s.last_tap = (d.id, d.member, now);
+                    s.sup_pick = Some(d.id);
                 }
             } else if is_unode(d.id) {
                 prog_save();
