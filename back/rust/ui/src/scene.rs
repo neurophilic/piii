@@ -677,7 +677,23 @@ fn rect(g: &Geo, id: usize) -> Rect {
 
 fn geo(s: &State) -> Geo {
     let (w, h) = (host::vw(), host::vh());
-    geo_zoom(s, w, h, w < 700.0, s.zoom)
+    let mut g = geo_zoom(s, w, h, w < 700.0, s.zoom);
+    // save, lock, chain and reset stay where the bar on top shows them, so their wires meet the bar's buttons
+    for (i, id) in [S_SAVE, S_LOCK, S_CHAIN, S_RESET].iter().enumerate() {
+        let (x, y, bw, bh) = bar_slot(i, w, h);
+        g.rects[*id] = ((x - g.ox) / g.k, (y - g.oy) / g.k, bw / g.k, bh / g.k);
+    }
+    g
+}
+
+/// Where the floating bar's i-th button is on screen (x, y, w, h): its CSS, in numbers.
+fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
+    let (bw, bh) = (46.0, 44.0);
+    let narrow = vw < 700.0;
+    let gap = if narrow { 22.0 } else { 30.0 };
+    let top = if narrow { vh - ((vw / 2.0 - 12.0).min(vh * 0.3) + 24.0) - bh } else { 10.0 };
+    let left = vw / 2.0 - (4.0 * bw + 3.0 * gap) / 2.0 + i as f64 * (bw + gap);
+    (left, top, bw, bh)
 }
 
 /// The canvas laid out in a box of w × h: the whole page, or the floating π canvas over an open super.
@@ -1046,6 +1062,7 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls_if(!mini && id >= S_WELCOME && !s.free.contains(&id) && !(icon_kind(id) && icon_area(w * g.k, h * g.k)), "locked")
             .cls_if(!mini && s.sup_pick == Some(id), "picked")
             .cls_if(!mini && id == S_RESET && s.reset_hold.is_some(), "holding")
+            .cls_if(!mini && is_ctl_super(id), "under-bar")
             .attr("data-s", format!("{}", id))
             .attr_if(id != S_PROG && id != S_HOLD, "data-solid", "1")
             .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
@@ -1962,6 +1979,29 @@ fn group_page(gi: usize) -> N {
 }
 
 /// The four ports of a super drawn by CSS (a window, an icon, a member).
+/// The tips of a control on the floating bar: the same tips as on the canvas, which sit pinned under the bar, so a wire
+/// starts or ends here.
+fn bar_ports(id: usize) -> N {
+    let tip = |c: &'static str, t: Tip| -> N {
+        el("svg:svg")
+            .cls(c)
+            .attr("viewBox", "-8 -8 16 16")
+            .attr("width", "14")
+            .attr("height", "14")
+            .attr("data-stop", "1")
+            .on("click", Msg::Port(id, t.code()))
+            .kid(el("svg:title").text(match t {
+                Tip::Out => "out. Click, then click a tip",
+                Tip::In => "in",
+                Tip::Control => "control",
+                Tip::Gate => "gate",
+            }))
+            .kid(el("svg:path").attr("d", star(0.0, 0.0, 7.0)))
+            .into()
+    };
+    el("span").cls("pts bar-pts").kid(tip("pt l", Tip::In)).kid(tip("pt r", Tip::Out)).kid(tip("pt t", Tip::Control)).kid(tip("pt b", Tip::Gate)).into()
+}
+
 fn ports() -> N {
     let st = |c: &'static str| -> N {
         el("svg:svg")

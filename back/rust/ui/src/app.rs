@@ -1490,8 +1490,10 @@ fn view(s: &State) -> N {
     if s.gate {
         return gate_view(s);
     }
+    // the sidebar and the controls are on top of every view, always (owner, 2026-10-14: "both sidebar and top icons are
+    // always on top. Always.")
     let body: N = if s.page == Page::Home {
-        canvas_view(s)
+        el("div").cls("focus home").kid(canvas_view(s)).kid(rail(s)).kid(ctl_bar(s)).into()
     } else {
         let page = match s.page {
             Page::Assess => assess_page(s),
@@ -1511,7 +1513,7 @@ fn view(s: &State) -> N {
         // what is open takes 70% of the canvas, which stays live around it (owner, 2026-10-14: "double clicking
         // anything opens it to 70% of the canvas"); on a phone it still takes the screen
         if s.peek && host::vw() >= 700.0 {
-            el("div").cls("focus peek").kid(scene_view(s, false)).kid(rail(s)).kid(window_frame(s, page)).into()
+            el("div").cls("focus peek").kid(scene_view(s, false)).kid(rail(s)).kid(window_frame(s, page)).kid(ctl_bar(s)).into()
         } else {
             el("div").cls("focus").kid(rail(s)).kid(window_frame(s, page)).kid(scene_view(s, true)).kid(ctl_bar(s)).into()
         }
@@ -3033,9 +3035,9 @@ fn ctl_bar(s: &State) -> N {
                 .attr("aria-label", sup_label(id))
                 .cls_if(id == S_RESET && s.reset_hold.is_some(), "holding")
                 .on_if(id != S_RESET, "click", Msg::Activate(id as u8))
-                .on_if(id == S_RESET, "pdown", Msg::TV(Tool::Grid, 66))
+                .kid_if(id == S_RESET, || el("span").cls("hold-face").on("pdown", Msg::TV(Tool::Grid, 66)).into())
                 .kid(control_icon(id, s))
-                .kid(ports())
+                .kid(bar_ports(id))
                 .into()
         }))
         .into()

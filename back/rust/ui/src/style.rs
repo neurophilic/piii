@@ -365,6 +365,9 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+.stage>.sx.under-bar{visibility:hidden}
+.bar-pts{pointer-events:none}.bar-pts .pt{pointer-events:auto;cursor:pointer}
+.hold-face{position:absolute;inset:6px;z-index:1;cursor:pointer;touch-action:none}
 .stage>.sx.ctl{z-index:7}
 .sx.ctl.holding{background:linear-gradient(var(--accent-soft),var(--accent-soft)) no-repeat left bottom/100% 0%;animation:holdfill .9s linear forwards}
 @keyframes holdfill{to{background-size:100% 100%}}
