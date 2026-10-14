@@ -302,7 +302,13 @@ addEventListener("keydown", (e) => {
 });
 const STEER = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d", "W", "A", "S", "D", "Escape"]);
 addEventListener("keyup", (e) => { if (STEER.has(e.key)) { const [p, l] = put("-" + e.key); W.keyed(p, l); } });
-addEventListener("pointermove", (e) => { if (capturing) W.pointer(0, e.clientX, e.clientY); });
+// holding Shift shows the four arrows: a Shift drag resizes any super (owner, 2026-10-14)
+const typing = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+const shifted = (on) => document.documentElement.classList.toggle("shift-on", !!on);
+addEventListener("keydown", (e) => { if (e.key === "Shift" && !typing(e.target)) shifted(true); });
+addEventListener("keyup", (e) => { if (e.key === "Shift") shifted(false); });
+addEventListener("blur", () => shifted(false));
+addEventListener("pointermove", (e) => { if (!e.shiftKey && document.documentElement.classList.contains("shift-on")) shifted(false); if (capturing) W.pointer(0, e.clientX, e.clientY); });
 addEventListener("pointerup", (e) => { if (capturing) W.pointer(1, e.clientX, e.clientY); });
 addEventListener("pointercancel", (e) => { if (capturing) W.pointer(2, e.clientX, e.clientY); });
 // Zoom is piii's own, the same everywhere, and never the browser's (owner, 2026-10-14): a pinch, Ctrl/⌘ and the wheel,

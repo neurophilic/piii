@@ -265,21 +265,21 @@ font-size:20px;line-height:1;color:var(--muted)}
 .frame{position:absolute;inset:0;border:2px solid var(--accent);pointer-events:none;z-index:3}
 .stage{position:absolute;left:0;top:0;width:1440px;height:900px;transform-origin:0 0}
 .wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.wires{--wz:1}.wires .w,.map .w{fill:none;stroke:#2b2b2b;stroke-width:calc(1.8px*var(--wz));stroke-linejoin:round;stroke-linecap:round}
 .wires .w,.wires .w-temp,.wires .w-hit{vector-effect:non-scaling-stroke}
-.wires .w.flow,.map .w.data{stroke:var(--magenta);stroke-width:2.4;stroke-linecap:butt}
-.wires .w.control{stroke-dasharray:7 5}
-.wires .w.gate{stroke-width:3;stroke-dasharray:0.1 6;stroke-linecap:round}
+.map .w.data{stroke-width:2.4}.wires .w.flow,.map .w.data{stroke:var(--magenta);stroke-linecap:butt}
+.wires .w.flow{stroke-width:calc(2.2px*var(--wz))}.wires .w.control{stroke-dasharray:calc(7px*var(--wz)) calc(5px*var(--wz))}
+.wires .w.gate{stroke-width:calc(2.8px*var(--wz));stroke-dasharray:0.1px calc(6px*var(--wz));stroke-linecap:round}
 .wires .head.flow{fill:var(--magenta)}.wires .head.ink{fill:#2b2b2b}
 .ports-svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5}
 .ports-svg .port{pointer-events:all;cursor:pointer}
 .ports-svg .port .pad{fill:transparent}
-.ports-svg .port .mark{fill:var(--paper);stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round}
+.ports-svg .port .mark{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 .ports-svg .port.out .mark{fill:var(--ink)}
 .ports-svg .port:hover .mark{stroke:var(--accent)}
 .ports-svg .port.out:hover .mark{fill:var(--accent)}
 .ports-svg .port.on .mark{fill:var(--accent);stroke:var(--accent)}
-.ports-svg .port.target .mark{stroke:var(--accent);stroke-width:3.2;fill:#eef0fe}
+.ports-svg .port.target .mark{stroke:var(--accent);stroke-width:2.6;fill:#eef0fe}
 .scene.floating .ports-svg .port{pointer-events:none}
 .ports-svg .port .mark{transition:opacity .15s}.ports-svg .port:not(.wired):not(.on):not(.target) .mark{opacity:0}.ports-svg .port:hover .mark,.wiring .ports-svg .port .mark,.board-ports.holding .port .mark{opacity:1}
 .wires .ports,.map .ports{fill:var(--ink)}
@@ -363,9 +363,9 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 /* no "open" dot on icons (owner, 2026-10-14) */
 .ric.open::after,.super.open::after{content:none!important;display:none!important}
 /* wiring */
-.wires .w-hit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
-.wires .w.sel{stroke:var(--accent);stroke-width:3}
-.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 5;stroke-linecap:round;stroke-linejoin:round}.wires .w-temp.snapped{stroke-dasharray:none;stroke-width:2.4}
+.wires .w-hit{fill:none;stroke:transparent;stroke-width:calc(14px*max(1,var(--wz)));pointer-events:stroke;cursor:pointer}
+.wires .w.sel{stroke:var(--accent);stroke-width:calc(3px*var(--wz))}
+.wires .w-temp{fill:none;stroke:var(--accent);stroke-width:calc(2px*var(--wz));stroke-dasharray:calc(6px*var(--wz)) calc(5px*var(--wz));stroke-linecap:round;stroke-linejoin:round}.wires .w-temp.snapped{stroke-dasharray:none;stroke-width:calc(2.4px*var(--wz))}
 .ports-svg .port.snap .mark{fill:var(--accent);stroke:var(--accent);opacity:1;transform-box:fill-box;transform-origin:center;transform:scale(1.7)}
 .wires .w-hit:hover{stroke:rgba(47,64,232,.22)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
@@ -374,11 +374,17 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 /* panning: an open hand over what can be panned, a closed one while it is (owner, 2026-10-14) */
 .scene,.win-body{cursor:grab}:where(.scene *,.win-body *){cursor:auto}
 .scene.panning,.scene.panning *,html.panning,html.panning *{cursor:grabbing!important}
+html.shift-on,html.shift-on *{cursor:move!important}
 .ric{-webkit-user-drag:none;user-select:none}
+/* wiring off: tips that hold no wire stay hidden and no tip takes a click; on: every tip shows and wires */
+.app:not(.wire-on) .ports-svg .port,.app:not(.wire-on) .bar-pts .pt{pointer-events:none!important}
+.app:not(.wire-on) .ports-svg .port:not(.wired) .mark{opacity:0!important}
+.app.wire-on .ports-svg .port .mark{opacity:1}
+.ctl-bar .ric.on{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:3px}
 .win-in{position:relative;user-select:none;-webkit-user-select:none}.win-in input,.win-in textarea{user-select:text;-webkit-user-select:text}
 .page-layer{position:absolute;left:0;top:0;width:0;height:0;overflow:visible;z-index:6}
 .layer-node{position:absolute;width:88px;height:88px;box-sizing:border-box;display:grid;place-items:center}
-.layer-spark path{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}
+.layer-spark svg{display:block}.layer-spark path{fill:none;stroke:var(--ink);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 .layer-super{background:#fff;border:1.5px solid #2b2b2b;padding:8px}
 .layer-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;text-align:center;outline:none}.layer-in:focus{border-color:var(--accent)}
 .win.picked .win-head{cursor:grab}

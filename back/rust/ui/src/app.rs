@@ -280,6 +280,8 @@ struct State {
     ppan: (f64, f64),
     /// the example program is on the canvas (put there by its sidebar icon; hidden again on the next visit)
     example_on: bool,
+    /// wiring is on (the + on the bar): every tip shows and wires; off, tips stay out of the way
+    wire_mode: bool,
     /// sparkles (0) and supers (1) drawn on pages, by the page's address: kind, x, y, label
     layers: BTreeMap<String, Vec<(u8, f64, f64, String)>>,
     /// where the open window has been moved to (px from its place), once unlocked
@@ -448,6 +450,7 @@ pub fn start() {
         pzoom: 1.0,
         ppan: (0.0, 0.0),
         example_on: false,
+        wire_mode: false,
         layers: BTreeMap::new(),
         win_off: (0.0, 0.0),
         pan_drag: None,
@@ -662,7 +665,7 @@ fn layer_view() -> N {
             let base = el("div").cls("layer-node").attr("data-layer", "1").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px", x, y));
             if *k == 0 {
                 base.cls("layer-spark")
-                    .kid(el("svg:svg").attr("viewBox", "-40 -40 80 80").attr("width", "80").attr("height", "80").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 36.0))))
+                    .kid(el("svg:svg").attr("viewBox", "-44 -44 88 88").attr("width", "100%").attr("height", "100%").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 43.0))))
                     .into()
             } else {
                 base.cls("layer-super")
@@ -1591,13 +1594,16 @@ fn update(msg: Msg) {
         Msg::Activate(id) => activate(id as usize, None),
         Msg::Port(id, t) => {
             // the click a press makes is already handled by the press (keyboard clicks still come here)
-            if host::now() - s.port_press > 500.0 {
+            if s.wire_mode && host::now() - s.port_press > 500.0 {
                 if let Some(tip) = Tip::of(t) {
                     port_click(id, tip);
                 }
             }
         }
         Msg::PortDown(id, t, xy) => {
+            if !s.wire_mode {
+                return;
+            }
             if let Some(tip) = Tip::of(t) {
                 port_press(id, tip, &xy);
             }
@@ -1710,7 +1716,7 @@ fn view(s: &State) -> N {
     };
     // the canvas shows its own note; elsewhere it floats over the page, so the lock's answers are always seen
     let page_note = s.page != Page::Home && !s.peek && !s.note.is_empty();
-    el("div").cls("app").kid(body).kid_if(page_note, || el("div").cls("wire-note page-note").attr("role", "status").text(s.note.clone()).into()).kid_if(s.consent_open, || consent_panel(s)).kid(modal_view(s)).kid(toasts_view(s)).into()
+    el("div").cls("app").cls_if(s.wire_mode, "wire-on").kid(body).kid_if(page_note, || el("div").cls("wire-note page-note").attr("role", "status").text(s.note.clone()).into()).kid_if(s.consent_open, || consent_panel(s)).kid(modal_view(s)).kid(toasts_view(s)).into()
 }
 
 
@@ -3336,5 +3342,33 @@ fn ctl_bar(s: &State) -> N {
                 .kid(if s.page == Page::Home { bar_ports(id) } else { ports() })
                 .into()
         }))
+        // the + turns wiring on and off (owner, 2026-10-14: "add a plus button to the tools on the top so it activates
+        // wiring")
+        .kid(
+            el("button")
+                .attr("type", "button")
+                .cls("ric ctlb")
+                .cls_if(s.wire_mode, "on")
+                .attr("title", if s.wire_mode { "Wiring is on: click a tip, or drag from it, to wire. Click to turn it off" } else { "Wire: click to turn wiring on" })
+                .attr("aria-label", "Wire")
+                .attr("aria-pressed", if s.wire_mode { "true" } else { "false" })
+                .on("click", Msg::T(Tool::Ledger, 53, String::new()))
+                .kid(svg_icon(&["M12 5v14", "M5 12h14"], "26", if s.wire_mode { "ci accent" } else { "ci" }))
+                .kid(ports()),
+        )
         .into()
+}
+
+/// The + on the bar: wiring on, or off (a wire being made is let go).
+fn wire_mode_toggle() {
+    let s = st();
+    s.wire_mode = !s.wire_mode;
+    if !s.wire_mode {
+        s.held_port = None;
+        s.port_drag = None;
+        if let Page::Group(g) = s.page {
+            board(g as usize).held = None;
+        }
+        host::capture(false);
+    }
 }

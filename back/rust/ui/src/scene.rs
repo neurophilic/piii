@@ -781,7 +781,8 @@ fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
     let gap = if narrow { 10.0 } else { 12.0 };
     let top = if narrow { vh - 80.0 - bh } else { 10.0 };
     // five buttons: lock, chain, reset, play, stop
-    let left = vw / 2.0 - (5.0 * bw + 4.0 * gap) / 2.0 + i as f64 * (bw + gap);
+    // six buttons: lock, chain, reset, play, stop, and the + for wiring
+    let left = vw / 2.0 - (6.0 * bw + 5.0 * gap) / 2.0 + i as f64 * (bw + gap);
     (left, top, bw, bh)
 }
 
@@ -1056,22 +1057,27 @@ fn scene_view(s: &State, mini: bool) -> N {
         geo(s)
     };
     // wires, drawn under the supers; their ports over them
-    let mut wires = el("svg:svg").cls("wires").attr("aria-hidden", "true").attr("width", "1").attr("height", "1").kid(
-        el("svg:defs")
-            .kid(arrowhead("ah-flow", "flow"))
-            .kid(arrowhead("ah-ink", "ink")),
-    );
+    // one size for everything on a wire, from the zoom: the strokes are in screen pixels, the rest in canvas units
+    let ws = wire_scale(g.k);
+    let du = ws / g.k.max(0.05);
+    let mut wires = el("svg:svg").cls("wires").attr("aria-hidden", "true").attr("width", "1").attr("height", "1")
+        .style(format!("--wz:{:.3}", ws))
+        .kid(
+            el("svg:defs")
+                .kid(arrowhead("ah-flow", "flow", 10.0 * du))
+                .kid(arrowhead("ah-ink", "ink", 10.0 * du)),
+        );
     let nw = s.wires.len();
     for (i, (a, b, tip)) in s.wires.iter().enumerate() {
         let (a, b, tip) = (*a, *b, *tip);
         let (px, py) = leave_point(&g, a, tip);
         let (qx, qy) = tip_point(&g, b, tip);
         let d = match tip {
-            Tip::In | Tip::Out => elbow(px, py, qx, qy, 24.0 / g.k.max(0.2)),
+            Tip::In | Tip::Out => elbow(px, py, qx, qy, 24.0 * du),
             _ => {
                 // top-to-bottom wires curve (owner, 2026-10-14): leave the way the tip faces, arrive straight down
                 // into a control or straight up into a gate
-                let k = ((qy - py).abs() / 2.0).max(40.0);
+                let k = ((qy - py).abs() / 2.0).max(40.0 * du);
                 let (c1x, c1y) = (px + k, py);
                 let c2y = if tip == Tip::Control { qy - k } else { qy + k };
                 format!("M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}", px, py, c1x, c1y, qx, c2y, qx, qy)
@@ -1084,7 +1090,7 @@ fn scene_view(s: &State, mini: bool) -> N {
         let ((px, py), (qx, qy)) = (tip_point(&g, a, ta), tip_point(&g, b, tb));
         // out of its tip (up from a control, down from a gate), round by a lane left of both, and into the other tip
         // from outside, clear of everything between
-        let away = |t: Tip| if t == Tip::Control { -40.0 } else { 40.0 };
+        let away = |t: Tip| if t == Tip::Control { -40.0 * du } else { 40.0 * du };
         // curved too (owner, 2026-10-14): one sweep, leaving and arriving the way each tip faces
         let k = (((qy - py).abs() + (qx - px).abs()) / 80.0).max(1.5);
         let d = format!(
@@ -1126,10 +1132,10 @@ fn scene_view(s: &State, mini: bool) -> N {
                 Tip::Gate => (0.0, 1.0),
             }
         };
-        let k = (((x2 - x1).abs() + (y2 - y1).abs()) * 0.4).max(30.0 / g.k.max(0.2));
+        let k = (((x2 - x1).abs() + (y2 - y1).abs()) * 0.4).max(30.0 * du);
         let (ax, ay) = away(ta);
         let (bx, by) = match snap { Some((_, t)) => away(t), None => (-ax, -ay) };
-        let e = 24.0 / g.k.max(0.2);
+        let e = 24.0 * du;
         let d = match ta {
             Tip::Out => elbow(x1, y1, x2, y2, e),
             Tip::In => elbow(x2, y2, x1, y1, e),
@@ -1277,15 +1283,26 @@ fn elbow(px: f64, py: f64, qx: f64, qy: f64, e: f64) -> String {
     }
 }
 
-fn arrowhead(id: &'static str, cls: &'static str) -> N {
+/// How big wires, arrowheads and tips look on screen at a zoom: they grow and shrink with the canvas, but gently, so a
+/// wire never turns into a hair when zoomed out or a band when zoomed in (owner, 2026-10-14: "improve the scaling of
+/// the wirings").
+fn wire_scale(z: f64) -> f64 {
+    let z = if z.is_finite() && z > 0.0 { z } else { 1.0 };
+    // the square root of the zoom: twice as big a canvas, wires about 1.4 times as thick
+    z.sqrt_c().clamp(0.6, 1.7)
+}
+
+/// An arrowhead `size` user units across.
+fn arrowhead(id: &'static str, cls: &'static str, size: f64) -> N {
+    let size = format!("{:.2}", size);
     el("svg:marker")
         .attr("id", id)
         .attr("viewBox", "0 0 10 10")
         .attr("refX", "10")
         .attr("refY", "5")
         .attr("markerUnits", "userSpaceOnUse")
-        .attr("markerWidth", "11")
-        .attr("markerHeight", "11")
+        .attr("markerWidth", size.clone())
+        .attr("markerHeight", size)
         .attr("orient", "auto")
         .kid(el("svg:path").cls(format!("head {}", cls).as_str()).attr("d", "M0,0L10,5L0,10Z"))
         .into()
@@ -1359,7 +1376,10 @@ fn libm_cos(x: f64) -> f64 {
 /// made, the tips it may join are marked.
 fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
     // the connectors: small sparkles (owner, 2026-10-14: "make the center sparkle bigger and connector sparkles smaller")
-    let r = if mini { 4.0 / g.k } else if g.w < 700.0 { 8.5 } else { 7.0 / g.k.max(0.6) };
+    let ws = wire_scale(g.k);
+    let r = if mini { 4.0 / g.k } else { (if g.w < 700.0 { 8.5 } else { 6.5 }) * ws / g.k.max(0.05) };
+    // the place to press stays easy to hit however far out the canvas is zoomed
+    let pad = (r * 2.4).max(15.0 / g.k.max(0.05));
     let mut svg = el("svg:svg").cls("ports-svg").attr("width", "1").attr("height", "1").attr("aria-hidden", if mini { "true" } else { "false" });
     let snap = if !mini && s.held_port.is_some() { nearest_tip(s, s.pend_at.0 * g.k + g.ox, s.pend_at.1 * g.k + g.oy) } else { None };
     let mut nodes: Vec<usize> = (0..NSUP).filter(|i| *i != S_PALETTE && *i != S_EXAMPLES && !is_gone(*i)).collect();
@@ -1395,7 +1415,7 @@ fn ports_view(s: &State, g: &Geo, mini: bool) -> N {
                     .on("click", Msg::Port(id, tip.code()))
                     .on("pdown", Msg::PortDown(id, tip.code(), String::new()))
                     // a big target: easy to hit (owner, 2026-10-14: "improve the wiring experience")
-                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", r * 2.4)))
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", pad)))
                     .kid(el("svg:title").text(format!("{}: {}", name_of(id), match tip {
                         Tip::Out => "out. Click, then click a tip",
                         Tip::In => "in",

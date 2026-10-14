@@ -913,11 +913,13 @@ fn sparkle_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         .on_if(!mini, "pdown", Msg::PDown(n.id, String::new()))
         .kid(
             el("svg:svg")
-                .attr("viewBox", "-40 -40 80 80")
-                .attr("width", "80")
-                .attr("height", "80")
+                // the sparkle fills its box, point to point, like a super fills its own: the two start the same size
+                // (owner, 2026-10-14: "super and sparkle are same size in the beginning")
+                .attr("viewBox", "-44 -44 88 88")
+                .attr("width", "100%")
+                .attr("height", "100%")
                 .attr("aria-hidden", "true")
-                .kid(el("svg:path").attr("d", star(0.0, 0.0, 36.0))),
+                .kid(el("svg:path").attr("d", star(0.0, 0.0, 43.0))),
         )
         .kid_if(!v.is_empty(), || el("span").cls("sp-val").text(v.clone()).into())
         .into()
@@ -1018,7 +1020,7 @@ const PROG_CSS: &str = "\
 .p-status{position:absolute;left:110px;right:14px;top:14px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\
 .sx.unode{background:#fff;border:1.4px solid #2b2b2b;display:flex;flex-direction:column;justify-content:center;padding:4px 10px;cursor:grab;z-index:2}\
 .sx.unode.sparkle{background:transparent;border:0;padding:0;box-shadow:none;overflow:visible;display:grid;place-items:center}\
-.sparkle path{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}.sparkle.sel path{fill:none;stroke:var(--accent)}.sx.unode.sparkle.sel{outline:0}\
+.sparkle svg{display:block}.sparkle path{fill:none;stroke:var(--ink);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}.sparkle.sel path{fill:none;stroke:var(--accent)}.sx.unode.sparkle.sel{outline:0}\
 .sp-val{position:absolute;top:100%;left:50%;transform:translateX(-50%);font-size:11.5px;color:var(--magenta);font-weight:600;white-space:nowrap}\
 .sx.unode.sel{outline:2px solid var(--accent);outline-offset:3px}\
 .u-text{font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;border:0;background:transparent;width:100%;padding:0;color:var(--ink);text-align:center;outline:none;cursor:text}\

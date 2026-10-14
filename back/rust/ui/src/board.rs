@@ -470,6 +470,9 @@ fn board_update(a: u16, v: String) {
     match a {
         // 2000 + k: the text in the k-th super of your own
         n if n >= 6000 => {
+            if !st().wire_mode {
+                return;
+            }
             let (node, tip) = (((n - 6000) / 4) as usize, ((n - 6000) % 4) as u8);
             let (x, y) = (nums.first().copied().unwrap_or(0.0), nums.get(1).copied().unwrap_or(0.0));
             st().port_press = host::now();
@@ -507,7 +510,7 @@ fn board_update(a: u16, v: String) {
         }
         // a tip: node,tip
         2 => {
-            if host::now() - st().port_press > 500.0 {
+            if st().wire_mode && host::now() - st().port_press > 500.0 {
                 let (node, tip) = (nums.first().copied().unwrap_or(0.0) as usize, nums.get(1).copied().unwrap_or(0.0) as u8);
                 board_tip(gi, node, tip);
             }
@@ -612,15 +615,19 @@ fn group_board(gi: usize) -> N {
     }
     let pien_pick = st().t2.pien.pick.clone();
     // wires
-    let mut wires = el("svg:svg").cls("wires").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h)).kid(el("svg:defs").kid(arrowhead("bah-flow", "flow")).kid(arrowhead("bah-ink", "ink")));
+    // the page zooms by CSS zoom, which scales everything on it: undo that, then size by the same gentle rule as the
+    // main canvas, so wires look alike everywhere
+    let pz = st().pzoom.max(0.05);
+    let du = wire_scale(pz) / pz;
+    let mut wires = el("svg:svg").cls("wires").attr("width", format!("{:.0}", w)).attr("height", format!("{:.0}", h)).style(format!("--wz:{:.3}", du)).kid(el("svg:defs").kid(arrowhead("bah-flow", "flow", 10.0 * du)).kid(arrowhead("bah-ink", "ink", 10.0 * du)));
     for (i, (from, to, v)) in b.links.iter().enumerate() {
         let (ft, tt) = (link_from(*v), link_to(*v));
         let a = btip(&b, *from, ft);
         let z = btip(&b, *to, tt);
         // in/out angled, control and gate curved (owner, 2026-10-14)
         let d = match (ft, tt) {
-            (1, 0) => elbow(a.0, a.1, z.0, z.1, 24.0),
-            (0, 1) => elbow(z.0, z.1, a.0, a.1, 24.0),
+            (1, 0) => elbow(a.0, a.1, z.0, z.1, 24.0 * du),
+            (0, 1) => elbow(z.0, z.1, a.0, a.1, 24.0 * du),
             _ => curve(a, side_of(ft), z, side_of(tt)),
         };
         let kind = match tt { 0 | 1 => "flow", 2 => "control", _ => "gate" };
@@ -635,8 +642,8 @@ fn group_board(gi: usize) -> N {
         let back = match side_of(b.held_tip) { Side::R => Side::L, Side::L => Side::R, Side::T => Side::B, Side::B => Side::T };
         let z = bsnap.map(|(n, t)| btip(&b, n, t)).unwrap_or(at);
         let d = match b.held_tip {
-            1 => elbow(a.0, a.1, z.0, z.1, 24.0),
-            0 => elbow(z.0, z.1, a.0, a.1, 24.0),
+            1 => elbow(a.0, a.1, z.0, z.1, 24.0 * du),
+            0 => elbow(z.0, z.1, a.0, a.1, 24.0 * du),
             _ => match bsnap {
                 Some((_, t)) => curve(a, side_of(b.held_tip), z, side_of(t)),
                 None => curve(a, side_of(b.held_tip), at, back),
@@ -665,8 +672,8 @@ fn group_board(gi: usize) -> N {
                     .attr("data-solid", "1")
                     .on("click", Msg::T(Tool::Grid, 2, format!("{},{}", i, t)))
                     .on("pdown", Msg::TV(Tool::Grid, 6000 + (i * 4) as u16 + t as u16))
-                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", "17"))
-                    .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, 7.0)))
+                    .kid(el("svg:circle").cls("pad").attr("cx", format!("{:.1}", x)).attr("cy", format!("{:.1}", y)).attr("r", format!("{:.1}", (17.0 * du).max(15.0 / pz))))
+                    .kid(el("svg:path").cls("mark").attr("d", sparkle(x, y, 6.5 * du)))
                     .kid(el("svg:title").text(match t { 0 => "in", 1 => "out: click, then click a tip of another super", 2 => "control", _ => "gate" })),
             );
         }
@@ -707,7 +714,7 @@ fn group_board(gi: usize) -> N {
         let (x, y, bw, bh) = bnode(&b, i);
         let base = el("div").cls("bnode").cls_if(b.picked == Some(i), "picked").attr("data-solid", "1").style(format!("left:{:.0}px;top:{:.0}px;width:{:.0}px;height:{:.0}px", x, y, bw, bh)).on("pdown", Msg::TV(Tool::Grid, 1000 + i as u16));
         nodes.push(if *kind == 0 {
-            base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-40 -40 80 80").attr("width", "80").attr("height", "80").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 36.0)))).into()
+            base.cls("bspark").attr("title", "A sparkle: a junction for wires").kid(el("svg:svg").attr("viewBox", "-44 -44 88 88").attr("width", "100%").attr("height", "100%").kid(el("svg:path").attr("d", sparkle(0.0, 0.0, 43.0)))).into()
         } else {
             base.cls("buser").kid(
                 el("input")
@@ -748,7 +755,7 @@ const BOARD_CSS: &str = "\
 .board .bnode{position:absolute;z-index:2;box-sizing:border-box;cursor:grab;touch-action:none}\
 .board .bnode.member{min-height:0}\
 .board .board-ports{position:absolute;left:0;top:0;z-index:4;overflow:visible;pointer-events:none}\
-.board .bspark svg path{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round}.bspark.picked svg path{stroke:var(--accent)}\
+.board .bspark svg{display:block}.board .bspark svg path{fill:none;stroke:var(--ink);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linejoin:round}.bspark.picked svg path{stroke:var(--accent)}\
 .board .buser{display:flex;align-items:center;padding:8px;background:#fff;border:1.6px solid var(--ink);border-radius:18px}\
 .board .buser-in{width:100%;border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px;font:inherit;font-size:15px;text-align:center;outline:none;cursor:text}.board .buser-in:focus{border-color:var(--accent)}\
 .board-bar{margin-top:10px;justify-content:space-between}\
