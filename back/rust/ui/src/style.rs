@@ -365,6 +365,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .scene.wiring,.scene.wiring *{cursor:crosshair!important}
 .sx.wire-target{outline:3px solid var(--accent);outline-offset:3px;background:#f3f4fe}
 .sx.locked{cursor:default}
+.stage>.sx.ctl{z-index:7}
 .sx.ctl.holding{background:linear-gradient(var(--accent-soft),var(--accent-soft)) no-repeat left bottom/100% 0%;animation:holdfill .9s linear forwards}
 @keyframes holdfill{to{background-size:100% 100%}}
 .sx.icon{display:grid!important;place-items:center;padding:0!important;background:#fff;overflow:hidden}
