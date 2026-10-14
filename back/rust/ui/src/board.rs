@@ -125,7 +125,7 @@ fn board_snap(b: &Board, from: usize, ftip: u8, at: (f64, f64)) -> Option<(usize
     let mut best: Option<(f64, usize, u8)> = None;
     for n in 0..b.pos.len() + b.extra.len() {
         for t in 0u8..4 {
-            if (n, t) == (from, ftip) {
+            if (n, t) == (from, ftip) || !tips_join(ftip, t) {
                 continue;
             }
             let (tx, ty) = btip(b, n, t);
@@ -192,6 +192,12 @@ fn btip(b: &Board, i: usize, t: u8) -> (f64, f64) {
 /// above that, where it leaves, counted from the out, so the wires saved when every wire left an out read the same.
 fn link_byte(from_tip: u8, to_tip: u8) -> u8 {
     (to_tip & 3) | (((from_tip ^ 1) & 3) << 2)
+}
+
+/// May a wire leaving tip `a` arrive at tip `b`? Out (1) and in (0) only with each other; control (2) and gate (3)
+/// only with each other.
+fn tips_join(a: u8, b: u8) -> bool {
+    matches!((a, b), (1, 0) | (0, 1)) || (a >= 2 && b >= 2)
 }
 
 fn link_to(v: u8) -> u8 {
@@ -538,7 +544,7 @@ fn board_tip(gi: usize, node: usize, tip: u8) {
     };
     let ft = b.held_tip;
     b.held = None;
-    if (from, ft) == (node, tip) {
+    if (from, ft) == (node, tip) || !tips_join(ft, tip) {
         return;
     }
     // kept leaving an out where it can, so the program reads it as data flowing on
@@ -627,7 +633,7 @@ fn group_board(gi: usize) -> N {
         for t in 0..4u8 {
             let (x, y) = btip(&b, i, t);
             let held = b.held == Some(i) && t == b.held_tip;
-            let target = b.held.is_some() && !held;
+            let target = b.held.is_some() && !held && tips_join(b.held_tip, t);
             let snapped = bsnap == Some((i, t));
             let wired = b.links.iter().any(|l| (l.0 == i && link_from(l.2) == t) || (l.1 == i && link_to(l.2) == t));
             tips = tips.kid(

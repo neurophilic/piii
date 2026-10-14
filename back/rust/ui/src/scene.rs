@@ -315,12 +315,13 @@ fn can_relay(s: &State, from: usize, ft: Tip, to: usize, tt: Tip) -> Result<(), 
 /// May the wire held at (a, ta) end at (id, tip)? Out to anything but an out is a wire, in from an out a wire drawn
 /// the other way, and any other pair passes on what arrives.
 fn can_join(s: &State, a: usize, ta: Tip, id: usize, tip: Tip) -> bool {
-    if ta == Tip::Out && tip != Tip::Out {
-        can_connect(s, a, id, tip).is_ok()
-    } else if ta == Tip::In && tip == Tip::Out {
-        can_connect(s, id, a, Tip::In).is_ok()
-    } else {
-        can_relay(s, a, ta, id, tip).is_ok()
+    // in and out wire only across, left to right: an out joins an in and an in an out, never a control or a gate
+    // (owner, 2026-10-14); a control or a gate joins a control or a gate
+    match (ta, tip) {
+        (Tip::Out, Tip::In) => can_connect(s, a, id, Tip::In).is_ok(),
+        (Tip::In, Tip::Out) => can_connect(s, id, a, Tip::In).is_ok(),
+        (Tip::Control | Tip::Gate, Tip::Control | Tip::Gate) => can_relay(s, a, ta, id, tip).is_ok(),
+        _ => false,
     }
 }
 
@@ -1460,7 +1461,10 @@ fn port_click(id: usize, tip: Tip) {
     if (a, ta) == (id, tip) {
         return;
     }
-    if ta == Tip::Out && tip != Tip::Out {
+    if !can_join(s, a, ta, id, tip) {
+        return;
+    }
+    if ta == Tip::Out && tip == Tip::In {
         match can_connect(s, a, id, tip) {
             Err(e) => note(format!("Not wired: {}", e)),
             Ok(()) => {
