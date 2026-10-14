@@ -865,7 +865,7 @@ fn sup_label(id: usize) -> &'static str {
         S_SAVE => "Save the layout",
         S_LOCK => "Lock: every canvas stays where it is, at its size; select one, then click here to unlock it (or lock it again)",
         S_CHAIN => "Chain: a holder brings what it holds",
-        S_RESET => "Reset: this canvas back to the start",
+        S_RESET => "Reset: hold to put this canvas back to the start",
         S_LEFT => "Move left",
         S_UP => "Move up",
         S_DOWN => "Move down",
@@ -1042,6 +1042,7 @@ fn scene_view(s: &State, mini: bool) -> N {
             .cls_if(!mini && s.wiring.as_ref().and_then(|w| w.to).map(|(t, _)| t == id).unwrap_or(false), "wire-target")
             .cls_if(!mini && id >= S_WELCOME && !s.free.contains(&id) && !(icon_kind(id) && icon_area(w * g.k, h * g.k)), "locked")
             .cls_if(!mini && s.sup_pick == Some(id), "picked")
+            .cls_if(!mini && id == S_RESET && s.reset_hold.is_some(), "holding")
             .attr("data-s", format!("{}", id))
             .attr_if(id != S_PROG && id != S_HOLD, "data-solid", "1")
             .style(format!("left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px", x, y, w, h));
@@ -1406,6 +1407,9 @@ fn begin_drag(id: usize, at: &str) {
         render();
         return;
     }
+    if id == S_RESET {
+        reset_hold_begin();
+    }
     let mut ids = alloc::vec![id];
     if chain_on(s, id) {
         ids.extend_from_slice(held_by(id));
@@ -1477,6 +1481,23 @@ fn wiring_move(x: f64, y: f64) {
     let From::Bar(gi, _) = w.from;
     let own = GROUPS[gi].sup;
     w.to = sup_at(&g, p).filter(|t| *t != own).map(|t| (t, side_for(&g, t, p, None)));
+}
+
+/// How long the reset button is held before it resets.
+const RESET_HOLD_MS: f64 = 900.0;
+
+fn reset_hold_begin() {
+    let s = st();
+    s.reset_hold = Some(host::now());
+    host::timer(RESET_HOLD_MS as u32, T_RESET);
+}
+
+/// Let go of the reset button: before the hold was long enough, nothing is reset.
+fn reset_hold_end(say: bool) {
+    let s = st();
+    if s.reset_hold.take().is_some() && say {
+        note("Hold the reset button to reset".to_string());
+    }
 }
 
 fn note(text: String) {
@@ -1578,10 +1599,20 @@ pub fn float_load() {
 }
 
 pub fn on_pointer(phase: u32, x: f64, y: f64) {
+    let s = st();
+    if s.reset_cap {
+        // the floating reset button, held: its release ends the hold
+        if phase != 0 {
+            s.reset_cap = false;
+            host::capture(false);
+            reset_hold_end(phase == 1);
+            render();
+        }
+        return;
+    }
     if board_pointer(phase, x, y) {
         return;
     }
-    let s = st();
     if let Some(d) = s.float_drag.as_mut() {
         match phase {
             0 => {
@@ -1660,6 +1691,9 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         0 => {
             if !d.moved && (x - d.sx).abs() + (y - d.sy).abs() > 5.0 {
                 d.moved = true;
+                if d.id == S_RESET {
+                    reset_hold_end(false);
+                }
                 // a bar pulled out of its bubble is a wire: wherever it lands, what it stands for opens
                 if let (Some(m), Some(gi)) = (d.member, group_of(d.id)) {
                     let at = ((x - d.sx) / d.k, (y - d.sy) / d.k);
@@ -1694,6 +1728,9 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
                 if d.moved {
                     layout_save();
                 }
+            } else if !d.moved && d.id == S_RESET {
+                // reset is held, not clicked: let go early and nothing happens
+                reset_hold_end(true);
             } else if !d.moved && (is_ctl_super(d.id) || matches!(d.id, S_TITLE | S_RUN | S_CLEAR) || is_unode(d.id)) {
                 // the controls are buttons: one click does it
                 activate(d.id, d.member);
@@ -1718,6 +1755,7 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         _ => {
             host::capture(false);
             s.drag = None;
+            reset_hold_end(false);
             render();
         }
     }

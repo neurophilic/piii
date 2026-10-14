@@ -273,6 +273,13 @@ fn board_update(a: u16, v: String) {
         return;
     }
     // the open window: its corner resizes it, and so does the middle button on its head
+    if a == 66 {
+        let s = st();
+        reset_hold_begin();
+        s.reset_cap = true;
+        host::capture(true);
+        return;
+    }
     if a == 65 {
         // a click on the window's head selects it, for the lock
         let s = st();

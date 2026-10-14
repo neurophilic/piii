@@ -271,6 +271,11 @@ struct State {
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
     note: String,
+    /// the reset button held down since this time; held long enough, it resets (owner, 2026-10-14: "holding this button
+    /// resets it")
+    reset_hold: Option<f64>,
+    /// that hold began on the floating controls, whose release comes through the pointer capture
+    reset_cap: bool,
     /// when the note was set: an older note's timer does not clear a newer one
     note_at: f64,
     /// the tools that were JavaScript (tools.rs)
@@ -301,6 +306,7 @@ const T_TICK: u32 = 2;
 const T_PI: u32 = 3;
 const T_LIVE: u32 = 4;
 const T_NOTE: u32 = 5;
+const T_RESET: u32 = 6;
 
 fn st() -> &'static mut State {
     STATE.get().as_mut().expect("started")
@@ -418,6 +424,8 @@ pub fn start() {
         wire_sel: None,
         wiring: None,
         note: String::new(),
+        reset_hold: None,
+        reset_cap: false,
         note_at: 0.0,
         t: Tools::default(),
         t2: Tools2::default(),
@@ -548,6 +556,19 @@ pub fn on_timer(token: u32) {
             if s.pi_shown < 120 {
                 s.pi_shown += 1;
                 host::timer(if s.pi_shown < 12 { 160 } else { 90 }, T_PI);
+            }
+        }
+        T_RESET => {
+            if let Some(t0) = s.reset_hold {
+                if host::now() - t0 >= RESET_HOLD_MS - 60.0 {
+                    s.reset_hold = None;
+                    if s.reset_cap {
+                        s.reset_cap = false;
+                        host::capture(false);
+                    }
+                    activate(S_RESET, None);
+                    note("Reset".to_string());
+                }
             }
         }
         T_NOTE => {
@@ -3010,7 +3031,9 @@ fn ctl_bar(s: &State) -> N {
                 .cls("sx ctl")
                 .attr("title", sup_label(id))
                 .attr("aria-label", sup_label(id))
-                .on("click", Msg::Activate(id as u8))
+                .cls_if(id == S_RESET && s.reset_hold.is_some(), "holding")
+                .on_if(id != S_RESET, "click", Msg::Activate(id as u8))
+                .on_if(id == S_RESET, "pdown", Msg::TV(Tool::Grid, 66))
                 .kid(control_icon(id, s))
                 .kid(ports())
                 .into()
