@@ -180,6 +180,18 @@ const ops = {
     cv.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(W.memory.buffer, +p, +l).slice(), +w, +h), 0, 0);
     return "1";
   },
+  // a file the server decides on (a paper): fetched with the session so an author gets their own private one, saved
+  // under a name; when it is not available, the fallback (the publisher's copy) opens instead
+  getfile: (a) => {
+    const [url, name, fallback] = a.split("\t"), tok = safe(() => localStorage.getItem("sp_token"), null);
+    fetch(url, { headers: tok ? { Authorization: "Bearer " + tok } : {} }).then(async (r) => {
+      if (!r.ok) throw new Error(r.status);
+      const blob = await r.blob(), u = URL.createObjectURL(blob);
+      const el = Object.assign(document.createElement("a"), { href: u, download: name || "paper.pdf" });
+      document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(u), 10000);
+    }).catch(() => { if (fallback) window.open(fallback, "_blank", "noopener"); else alert("The paper's file is not available to you: it stays private until its author publishes it."); });
+    return "1";
+  },
   copy: (a) => { navigator.clipboard && navigator.clipboard.writeText(a).catch(() => {}); return "1"; },
   // a chosen picture, decoded by the browser and shrunk to fit max × max: its RGBA pixels
   rgba: (a) => {

@@ -220,9 +220,10 @@ color:var(--paper);font-size:12px;font-weight:500;white-space:nowrap;pointer-eve
 overflow:hidden;text-overflow:ellipsis}
 .ric:hover .tip,.ric:focus-visible .tip{opacity:1}
 .rsep{flex:none;width:26px;height:1px;background:var(--line)}
-.focus.peek .win{left:calc(80px + (100vw - 92px) * .15);right:calc((100vw - 92px) * .15 + 12px);top:15vh;bottom:15vh;box-shadow:0 30px 80px -30px rgba(20,20,30,.45)}
+.focus.peek .win{left:calc(88px + (100vw - 100px) * .15);right:calc((100vw - 100px) * .15 + 12px);top:15vh;bottom:15vh;box-shadow:0 30px 80px -30px rgba(20,20,30,.45)}
 .focus.peek .scene{z-index:0}
-.win{position:fixed;z-index:8;left:80px;top:12px;right:12px;bottom:12px;display:flex;flex-direction:column;background:var(--card);
+.win-grip{position:absolute;z-index:3;touch-action:none}.win-grip.r{top:60px;right:0;bottom:22px;width:8px;cursor:ew-resize}.win-grip.b{left:22px;right:22px;bottom:0;height:8px;cursor:ns-resize}.win-grip.c{right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--line2) 50%,var(--line2) 56%,transparent 56%,transparent 70%,var(--line2) 70%,var(--line2) 76%,transparent 76%)}
+.win{min-width:360px;min-height:240px;position:fixed;z-index:8;left:88px;top:12px;right:12px;bottom:12px;display:flex;flex-direction:column;background:var(--card);
 border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 18px 50px -30px rgba(20,20,30,.35)}
 .win-head{flex:none;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 22px;border-bottom:1px solid var(--line)}
 .win-title{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
@@ -313,6 +314,7 @@ border-radius:0 0 0 6px}
 .scene .foot a,.scene .foot button,.scene .foot span{pointer-events:auto}
 /* an open super, and the others as icons: the same supers, small */
 .rail{background:var(--paper);border-right:2px solid var(--accent)}
+@media (min-width:700px){.rail{border:2px solid var(--accent);border-radius:22px;left:8px;top:8px;bottom:8px}}
 .ric{border-radius:0;border:1.5px solid #2b2b2b;background:#fff;overflow:visible}
 .ric.home{border-radius:0;background:#fff;color:var(--ink);font-size:22px;border:2px solid #2b2b2b}
 .ric.on{border-color:var(--accent);color:var(--accent);box-shadow:none;outline:2px solid var(--accent);outline-offset:3px}
@@ -365,7 +367,7 @@ border:1.2px solid #2b2b2b;color:var(--ink)}
 .wire-note{position:absolute;left:16px;bottom:14px;z-index:5;padding:7px 12px;background:var(--ink);color:var(--paper);font-size:13px;
 max-width:min(520px,calc(100% - 32px))}
 /* the π canvas, floating on top of an open super */
-.win{left:80px}
+.win{left:88px}
 .scene.floating{position:fixed;inset:auto;right:18px;bottom:18px;z-index:30;background:var(--paper);overflow:hidden;
 box-shadow:0 22px 50px -18px rgba(20,20,30,.45)}
 .scene.floating .frame{border-width:2px}

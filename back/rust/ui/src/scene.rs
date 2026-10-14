@@ -1501,7 +1501,8 @@ pub fn on_pointer(phase: u32, x: f64, y: f64) {
         return;
     }
     let movable = s.drag.as_ref().map(|d| d.how != 2 && (d.how == 1 || !locked(s, d.id)) && d.id >= S_WELCOME).unwrap_or(false);
-    let resizable = s.drag.as_ref().map(|d| d.how == 2 && d.id >= S_WELCOME && d.id < NSUP && !is_ctl_super(d.id)).unwrap_or(false);
+    // resizing too waits for the lock: a super is resized only once the lock has freed it (owner, 2026-10-14)
+    let resizable = s.drag.as_ref().map(|d| d.how == 2 && d.id >= S_WELCOME && d.id < NSUP && !is_ctl_super(d.id) && !locked(s, d.id)).unwrap_or(false);
     let Some(d) = s.drag.as_mut() else {
         host::capture(false);
         return;

@@ -37,6 +37,8 @@ pub struct Ledger {
     step: Eth,
     acct: String,
     sign_msg: String,
+    tx: Slot,
+    tx_for: String,
 }
 
 #[derive(Default, Clone, Copy, PartialEq)]
@@ -195,6 +197,7 @@ fn ledger_apply(t: Tool, w: u8, v: Value, err: Option<String>) {
         }
         (Tool::Ledger, 1) => put(&mut l.chain, v, err),
         (Tool::Ledger, 2) => put(&mut l.contracts, v, err),
+        (Tool::Ledger, 4) => put(&mut l.tx, v, err),
         (Tool::Ledger, 3) => {
             l.step = Eth::Idle;
             match err {
@@ -253,6 +256,7 @@ fn ledger_update(t: Tool, a: u16, v: String) {
         }
         (Tool::Ledger, 20) => wallet_connect(),
         (Tool::Ledger, 40) => host::go(&v),
+        (Tool::Ledger, 41) => paper_download(&v),
         (Tool::Ledger, 30) => {
             if v == "explorer" && l.contracts.needed() {
                 l.contracts.busy = true;

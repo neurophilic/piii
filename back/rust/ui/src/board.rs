@@ -57,7 +57,7 @@ fn board(gi: usize) -> &'static mut Board {
 fn board_default(n: usize) -> (Vec<(f64, f64)>, Vec<(usize, usize, u8)>) {
     // as many columns as the window holds (the rail and margins aside), at most four
     // the window's inner width: the page beside the rail (70% of it when opened over the canvas), at most 1000
-    let page = host::vw() - 92.0;
+    let page = host::vw() - 100.0;
     let avail = (if st().peek { page * 0.7 } else { page }).min(1000.0) - 48.0 - 24.0;
     let cols = (((avail + BGAP_X) / (BW + BGAP_X)) as usize).clamp(1, BCOLS);
     let pos = (0..n).map(|i| (24.0 + (i % cols) as f64 * (BW + BGAP_X), 24.0 + (i / cols) as f64 * (BH + BGAP_Y))).collect();
@@ -164,8 +164,29 @@ fn board_open(gi: usize, m: usize) {
 }
 
 /// The pointer, while a board super is held. True: it was the board's.
+/// The open window's size as the page lays it out (before any resizing).
+fn win_default() -> (f64, f64) {
+    let (vw, vh) = (host::vw(), host::vh());
+    if st().peek { ((vw - 92.0) * 0.7, vh * 0.7) } else { (vw - 92.0, vh - 24.0) }
+}
+
 fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
     let s = st();
+    if let Some((sx, sy, w0, h0, mode)) = s.win_drag {
+        if phase == 0 {
+            let w = if mode == 2 { w0 } else { (w0 + x - sx).max(360.0) };
+            let h = if mode == 1 { h0 } else { (h0 + y - sy).max(240.0) };
+            s.win_size = Some((w, h));
+        } else {
+            host::capture(false);
+            s.win_drag = None;
+            if let Some((w, h)) = s.win_size {
+                host::store_set("piii:win", &format!("{:.0},{:.0}", w, h));
+            }
+        }
+        render();
+        return true;
+    }
     let Some(d) = s.board_drag.as_mut() else { return false };
     let (gi, node) = (d.gi, d.node);
     match phase {
@@ -175,7 +196,7 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
             }
             // as on every canvas: a super stays put unless the lock has freed them or shift is held; the middle
             // button resizes it
-            if d.moved && d.how == 2 {
+            if d.moved && d.how == 2 && st().locked {
                 let (gx, gy) = (d.s0.0 + x - d.sx, d.s0.1 + y - d.sy);
                 let b = board(gi);
                 while b.sizes.len() <= node {
@@ -222,6 +243,24 @@ fn board_pointer(phase: u32, x: f64, y: f64) -> bool {
 fn board_update(a: u16, v: String) {
     if a == 50 {
         canvas_zoom(&v);
+        return;
+    }
+    // the open window: its corner resizes it, and so does the middle button on its head
+    if a == 60 || a == 62 || a == 63 || a == 64 {
+        let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+        if a == 62 && n.get(2).copied() != Some(2.0) {
+            return;
+        }
+        let s = st();
+        let (w, h) = s.win_size.unwrap_or_else(|| win_default());
+        let mode = match a { 63 => 1, 64 => 2, _ => 0 };
+        s.win_drag = Some((n.first().copied().unwrap_or(0.0), n.get(1).copied().unwrap_or(0.0), w, h, mode));
+        host::capture(true);
+        return;
+    }
+    if a == 61 {
+        st().win_size = None;
+        host::store_del("piii:win");
         return;
     }
     let gi = match st().page {
@@ -434,7 +473,7 @@ fn group_board(gi: usize) -> N {
         });
     }
     el("div")
-        .kid(head(g.title, "Everything in this super, on its own canvas. Double click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Supers stay where they are: shift + drag moves one, the middle button resizes it, and the lock frees them all."))
+        .kid(head(g.title, "Everything in this super, on its own canvas. Double click one to open it; wire an out into an in; double click for a sparkle, double right click for a super of your own. Supers stay where they are: shift + drag moves one, and once the lock frees them the middle button resizes them."))
         .kid(
             el("div")
                 .cls("board")

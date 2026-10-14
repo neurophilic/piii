@@ -254,6 +254,9 @@ struct State {
     /// what is open was opened by a double click on the canvas: it takes 70% of it, the canvas live around it
     peek: bool,
     peek_next: bool,
+    /// the open window's size when it was resized by its corner (or the middle button on its head)
+    win_size: Option<(f64, f64)>,
+    win_drag: Option<(f64, f64, f64, f64, u8)>,
     pend_at: (f64, f64),
     wire_sel: Option<usize>,
     wiring: Option<Wiring>,
@@ -305,7 +308,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS, LEARN_CSS, HAL_CSS, BOARD_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS, LEARN_CSS, HAL_CSS, BOARD_CSS, DOSSIER_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -392,6 +395,8 @@ pub fn start() {
         last_tap: (usize::MAX, None, 0.0),
         peek: false,
         peek_next: false,
+        win_size: None,
+        win_drag: None,
         pend_at: (0.0, 0.0),
         wire_sel: None,
         wiring: None,
@@ -451,6 +456,12 @@ pub fn start() {
     s.wallet = host::store_get("sp_wallet").unwrap_or_default();
     s.name = host::store_get("sp_researcher_name").unwrap_or_default();
     *STATE.get() = Some(s);
+    if let Some(v) = host::store_get("piii:win") {
+        let n: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+        if n.len() == 2 {
+            st().win_size = Some((n[0], n[1]));
+        }
+    }
     layout_load();
     float_load();
     let had_program = prog_load();
@@ -960,6 +971,9 @@ fn apply(want: Want, v: Value, err: Option<String>) {
         }
         Want::Dossier(h) => {
             if h == s.paper {
+                if err.is_none() {
+                    tx_load(&v);
+                }
                 put(&mut s.dossier, v, err);
             }
         }
@@ -1587,15 +1601,21 @@ fn window_frame(s: &State, content: N) -> N {
         Page::Confirm => s.ctoken.as_str(),
         _ => "",
     };
+    let size = s.win_size.map(|(w, h)| format!("width:{:.0}px;height:{:.0}px", w, h)).unwrap_or_default();
     el("section")
         .cls("win")
+        .attr_if(!size.is_empty(), "style", size)
         .attr("aria-label", super_name(s, s.page, arg))
         .kid(
             el("div")
                 .cls("win-head")
+                .on("pdown", Msg::TV(Tool::Grid, 62))
                 .kid(el("span").cls("win-title tag").text(super_name(s, s.page, arg))),
         )
         .kid(el("div").cls("win-body").kid(el("div").cls("win-in").kid(content)))
+        .kid(el("div").cls("win-grip c").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 60)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())))
+        .kid(el("div").cls("win-grip r").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 63)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())))
+        .kid(el("div").cls("win-grip b").attr("title", "Drag to resize; double click for the full size").on("pdown", Msg::TV(Tool::Grid, 64)).on("dblclick", Msg::T(Tool::Grid, 61, String::new())))
         .kid(ports())
         .into()
 }
@@ -2495,8 +2515,22 @@ fn dossier_view(d: &Value) -> N {
                     .kid(score_big(d.get("score").f())),
             )
             .kid(el("div").cls("pills").style("margin-top:12px").kids(paper_pills(d, 0.0)))
-            .kid(bars(d)),
+            .kid(bars(d))
+            .kid(el("div").cls("row").style("margin-top:10px").kid(download_button(d))),
     );
+    // warnings first: the most important thing to surface
+    let warnings = d.get("warnings").arr();
+    col = col.kid(if warnings.is_empty() {
+        el("div").cls("card").kid(el("h2").style("margin-bottom:6px").text("Processing warnings")).kid(el("div").cls("ok-box").text("No warnings were raised during processing. All extraction, model-panel and ledger stages completed as expected."))
+    } else {
+        el("div").cls("card").kid(el("h2").style("margin-bottom:6px").text("Processing warnings")).kid(el("ul").style("margin:0;padding-left:20px").kids(warnings.iter().map(|w| -> N { el("li").text(w.str().replace("**", "")).into() })))
+    });
+    if let Some(p) = diagnostics_panel(d) {
+        col = col.kid(p);
+    }
+    if let Some(p) = integrity_panel(d) {
+        col = col.kid(p);
+    }
 
     // piQ
     let mut kv: Vec<(String, String)> = Vec::new();
@@ -2526,8 +2560,21 @@ fn dossier_view(d: &Value) -> N {
             .kid(el("dl").cls("kv").kids(kv.into_iter().flat_map(|(k, v)| [el("dt").text(k).into(), el("dd").text(v).into()]))),
     );
 
-    // The criteria in full.
+    // The criteria in full; older records have only their scores
     let crit = d.get("criteria_breakdown").arr();
+    if crit.is_empty() {
+        let detail = d.get("criteria_detail").arr();
+        let rows: Vec<(String, String, f64)> = if !detail.is_empty() {
+            detail.iter().map(|c| (c.get("id").text(), c.get("title").text(), c.get("score").f())).collect()
+        } else {
+            d.get("scores_dict").entries().iter().map(|(k, v)| (k.clone(), String::new(), v.f())).collect()
+        };
+        if !rows.is_empty() {
+            col = col.kid(el("div").cls("card").kid(el("h2").style("margin-bottom:12px").text("The eight criteria")).kid(el("table").cls("data-table").kid(el("tbody").kids(rows.iter().map(|(id, t, sc)| -> N {
+                el("tr").kid(el("td").kid(el("b").text(id.chars().take(2).collect::<String>()))).kid(el("td").text(if t.is_empty() { id.get(3..).unwrap_or("").replace('_', " ") } else { t.clone() })).kid(el("td").cls("n").text(format!("{:.1}", sc))).into()
+            })))));
+        }
+    }
     if !crit.is_empty() {
         col = col.kid(
             el("div").cls("card").kid(el("h2").style("margin-bottom:12px").text("The eight criteria")).kids(crit.iter().map(|c| -> N {
@@ -2542,6 +2589,7 @@ fn dossier_view(d: &Value) -> N {
                     .cls("crit")
                     .kid(el("div").cls("spread").kid(el("h3").text(c.get("label").str())).kid(el("b").text(num(c.get("score").f(), 0))))
                     .kid(el("p").cls("hint").style("margin-top:4px").text(c.get("definition").str()))
+                    .kid_if(!c.get("override").str().is_empty(), || el("p").cls("override").text(c.get("override").text()).into())
                     .kid_if(!gap_text.is_empty(), || el("p").style("margin-top:6px;font-size:14px").text(format!("Largest gap: {}", gap_text)).into())
                     .kid_if(!contribs.is_empty(), || {
                         el("div")
@@ -2553,6 +2601,7 @@ fn dossier_view(d: &Value) -> N {
                                     .kid(el("tbody").kids(contribs.iter().map(|x| -> N {
                                         let desc = x.get("description").str();
                                         el("tr")
+                                            .cls_if(!x.get("signal").str().is_empty() && x.get("signal").str() == gap.str(), "gap")
                                             .kid(el("td").text(if desc.is_empty() { x.get("signal").str() } else { desc }))
                                             .kid(el("td").cls("n").text(num(x.get("value").f(), 2)))
                                             .kid(el("td").cls("n").text(format!("{} / {}", num(x.get("points").f(), 1), num(x.get("max_points").f(), 1))))
@@ -2566,78 +2615,15 @@ fn dossier_view(d: &Value) -> N {
         );
     }
 
-    // The panel.
-    let models = meta.get("participating_models").arr();
-    let rationale = meta.get("rationale").str();
-    if !models.is_empty() || !rationale.is_empty() {
-        col = col.kid(
-            el("div")
-                .cls("card")
-                .kid(el("h2").style("margin-bottom:8px").text("The panel"))
-                .kid_if(!rationale.is_empty(), || el("p").style("margin-bottom:10px").text(rationale).into())
-                .kid(el("div").cls("pills").kids(models.iter().map(|m| -> N {
-                    el("span").cls("pill").text(format!("{} · {}", m.get("label").str(), m.get("role").str())).into()
-                })))
-                .kid_if(!meta.get("failed_models").arr().is_empty(), || {
-                    el("p").cls("hint").style("margin-top:8px").text(format!(
-                        "Did not respond: {}",
-                        meta.get("failed_models").arr().iter().map(|m| m.get("label").str()).collect::<Vec<_>>().join(", ")
-                    ))
-                    .into()
-                }),
-        );
+    if let Some(p) = judge_panel(d) {
+        col = col.kid(p);
     }
-
-    // References.
-    let ra = d.get("reference_audit");
-    if !ra.is_null() && ra.get("verdict").str() != "not_assessed" {
-        let sm = ra.get("summary");
-        col = col.kid(
-            el("div")
-                .cls("card")
-                .kid(el("h2").style("margin-bottom:10px").text("References"))
-                .kid(el("dl").cls("kv").kids([
-                    el("dt").text("Checked against OpenAlex and Crossref").into(),
-                    el("dd").text(ra.get("checked").text()).into(),
-                    el("dt").text("Verified").into(),
-                    el("dd").text(ra.get("verified").text()).into(),
-                    el("dt").text("Not found").into(),
-                    el("dd").text(ra.get("unverified").text()).into(),
-                    el("dt").text("Fabricated").into(),
-                    el("dd").text(ra.get("fabricated").text()).into(),
-                    el("dt").text("Total references").into(),
-                    el("dd").text(sm.get("total").text()).into(),
-                    el("dt").text("Median year").into(),
-                    el("dd").text(sm.get("median_year").text()).into(),
-                ])),
-        );
-    }
-
-    let warnings = d.get("warnings").arr();
-    if !warnings.is_empty() {
-        col = col.kid(
-            el("div")
-                .cls("card")
-                .kid(el("h2").style("margin-bottom:6px").text("Warnings"))
-                .kid(el("ul").style("margin:0;padding-left:20px").kids(warnings.iter().map(|w| -> N { el("li").text(w.str()).into() }))),
-        );
-    }
-
     let report = d.get("evidence_report_text").str();
     if !report.trim().is_empty() {
         col = col.kid(el("div").cls("card").kid(el("h2").text("Evidence report")).kid(markdown(report)));
     }
 
-    let mut links = el("div").cls("row");
-    links = links.kid(el("a").attr("href", format!("/api/dossier/{}/fair", hash)).attr("target", "_blank").text("FAIR record"));
-    if d.get("has_file").truthy() {
-        links = links.kid(el("a").attr("href", format!("/api/papers/{}/file", hash)).attr("target", "_blank").text("Manuscript"));
-    }
-    let ex = d.get("explorer_url").str();
-    if !ex.is_empty() {
-        links = links.kid(el("a").attr("href", ex).attr("target", "_blank").attr("rel", "noopener").text("On chain"));
-    }
-    col = col.kid(el("div").cls("card").kid(links));
+    col = col.kids(record_panels(st(), d));
     col.into()
 }
 
@@ -2647,15 +2633,9 @@ fn markdown(src: &str) -> N {
     let mut list: Vec<N> = Vec::new();
     let mut para = String::new();
     fn inline(s: &str) -> Vec<N> {
-        let mut v: Vec<N> = Vec::new();
-        for (i, part) in s.split("**").enumerate() {
-            if part.is_empty() {
-                continue;
-            }
-            if i % 2 == 1 { v.push(el("strong").text(part).into()) } else { v.push(txt(part)) }
-        }
-        v
+        rich(s)
     }
+    let mut table: Vec<N> = Vec::new();
     let flush_para = |para: &mut String, out: &mut Vec<N>| {
         if !para.trim().is_empty() {
             out.push(el("p").kids(inline(para.trim())).into());
@@ -2667,11 +2647,37 @@ fn markdown(src: &str) -> N {
             out.push(el("ul").kids(core::mem::take(list)).into());
         }
     };
+    let flush_table = |table: &mut Vec<N>, out: &mut Vec<N>| {
+        if !table.is_empty() {
+            out.push(el("table").kid(el("tbody").kids(core::mem::take(table))).into());
+        }
+    };
     for line in src.lines() {
         let t = line.trim();
+        if !t.starts_with('|') {
+            flush_table(&mut table, &mut out);
+        }
+        let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
         if t.is_empty() {
             flush_para(&mut para, &mut out);
             flush_list(&mut list, &mut out);
+        } else if t.starts_with('|') {
+            flush_para(&mut para, &mut out);
+            flush_list(&mut list, &mut out);
+            // a separator row carries no content
+            if t.chars().all(|c| "|-: ".contains(c)) {
+                continue;
+            }
+            let cells: Vec<&str> = t.trim_matches('|').split('|').map(|c| c.trim()).collect();
+            table.push(el("tr").kids(cells.iter().map(|c| -> N { el("td").kids(inline(c)).into() })).into());
+        } else if compact.len() >= 3 && (compact.chars().all(|c| c == '-') || compact.chars().all(|c| c == '*') || compact.chars().all(|c| c == '_')) {
+            flush_para(&mut para, &mut out);
+            flush_list(&mut list, &mut out);
+            out.push(el("hr").into());
+        } else if let Some(q) = t.strip_prefix('>') {
+            flush_para(&mut para, &mut out);
+            flush_list(&mut list, &mut out);
+            out.push(el("blockquote").kids(inline(q.trim())).into());
         } else if let Some(h) = t.strip_prefix('#') {
             flush_para(&mut para, &mut out);
             flush_list(&mut list, &mut out);
@@ -2689,6 +2695,7 @@ fn markdown(src: &str) -> N {
     }
     flush_para(&mut para, &mut out);
     flush_list(&mut list, &mut out);
+    flush_table(&mut table, &mut out);
     el("div").cls("md").kids(out).into()
 }
 
@@ -2879,6 +2886,7 @@ include!("help.rs");
 include!("learn.rs");
 include!("hal.rs");
 include!("board.rs");
+include!("dossier.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {
