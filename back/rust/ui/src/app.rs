@@ -258,6 +258,7 @@ struct State {
     modal: Option<Modal>,
     rev: Rev,
     owner: Owner,
+    ledger: Ledger,
     /// the program drawn on the canvas (program.rs)
     prog: Prog,
 }
@@ -289,7 +290,7 @@ pub fn start() {
     host::append_child(shape, rule_node);
     host::append_child(head, shape);
     let tools = host::create_el("style");
-    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS));
+    let tools_css = host::create_text(&format!("{}{}{}{}{}{}{}{}{}{}{}", TOOLS_CSS, PROG_CSS, TOOLS2_CSS, QUVI_CSS, FACE_CSS, MAP_CSS, STUDIO_CSS, SCIM_CSS, REV_CSS, OWNER_CSS, LEDGER_CSS));
     host::append_child(tools, tools_css);
     host::append_child(head, tools);
     let meta = host::create_el("meta");
@@ -384,6 +385,7 @@ pub fn start() {
         modal: None,
         rev: Rev::default(),
         owner: Owner::default(),
+        ledger: Ledger::default(),
         prog: Prog::default(),
     };
 
@@ -547,6 +549,8 @@ fn route() {
     let frag = fragment(&href).trim_start_matches('/').to_string();
     let mut parts = frag.split('/');
     let s = st();
+    // a window over the page belongs to the page it was opened on
+    s.modal = None;
     match parts.next().unwrap_or("") {
         "" => s.page = Page::Home,
         "map" => s.page = Page::Map,
@@ -557,6 +561,11 @@ fn route() {
         "i" => {
             let g: u8 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(255);
             let m: u8 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(255);
+            // an item that is another page (Live, the journal, your account) opens that page
+            if let Some((_, Target::Hash(h))) = GROUPS.get(g as usize).and_then(|x| x.members.get(m as usize)) {
+                host::replace_url(h);
+                return route();
+            }
             if GROUPS.get(g as usize).map(|x| (m as usize) < x.members.len()).unwrap_or(false) {
                 if s.item_key != (g, m) {
                     s.item.reset();
@@ -568,6 +577,15 @@ fn route() {
             }
         }
         "live" => s.page = Page::Live,
+        // the old page's addresses
+        "leaderboard" | "leaderboards" => {
+            host::replace_url("#/i/1/2");
+            return route();
+        }
+        "explorer" | "ledger" => {
+            host::replace_url("#/i/1/4");
+            return route();
+        }
         "confirm" => {
             let t = crate::text::url_decode(parts.next().unwrap_or(""));
             if t != s.ctoken {
@@ -703,6 +721,11 @@ fn load() {
             if s.mode == Mode::Find && s.topics.needed() {
                 s.topics.busy = true;
                 request(Want::Topics, "GET", "/api/discover/hot-topics", "", 0);
+            }
+            if signed_in(s) && s.piq.needed() {
+                s.piq.busy = true;
+                let u = format!("/api/user/piq-total?{}", ident_query(s));
+                request(Want::Piq, "GET", &u, "", 0);
             }
         }
         Page::Explore => {
@@ -1983,9 +2006,13 @@ fn assess_page(s: &State) -> N {
     let fee_note = {
         let fee = s.emission.data.as_ref().map(|e| e.get("fee").get("fee").f());
         if signed_in(s) {
-            match fee {
-                Some(f) => format!("{} piQ per paper, charged from your balance.", num(f, 2)),
-                None => String::new(),
+            let bal = s.piq.data.as_ref().map(|p| (p.get("balance").f(), p.get("papers_affordable").f() as i64, p.get("unproven_note").text()));
+            match (fee, bal) {
+                (_, Some((_, _, note))) if !note.is_empty() => note,
+                (Some(f), Some((b, _, _))) if b < f => format!("{} piQ per paper. Your balance, {} piQ, is below it: earn piQ by having your own manuscripts assessed or by winning a run on the Map of Science.", num(f, 2), num(b, 2)),
+                (Some(f), Some((b, n, _))) => format!("{} piQ per paper. Balance {} piQ — covers {} paper{}.", num(f, 2), num(b, 2), n, if n == 1 { "" } else { "s" }),
+                (Some(f), None) => format!("{} piQ per paper, charged from your balance.", num(f, 2)),
+                _ => String::new(),
             }
         } else {
             match &s.trial.data {
@@ -2000,10 +2027,11 @@ fn assess_page(s: &State) -> N {
     };
 
     let mut col = el("div")
-        .kid(head(
+        .kid(head_help(
             "Assess a manuscript",
             "A panel of independent AI models reads the paper, deterministic checks audit its references and \
              reproducibility, and it is scored on eight open criteria: the piX index.",
+            "assess",
         ))
         .kid(
             el("div")
@@ -2738,7 +2766,7 @@ fn account_page(s: &State) -> N {
         if let Some(e) = &s.login_err {
             card = card.kid(el("div").cls("err-box").style("margin-top:14px").text(e.clone()));
         }
-        col = col.kid(card);
+        col = col.kid(card).kid(wallet_card(s));
         if let Some(t) = &s.trial.data {
             col = col.kid(el("div").cls("card").kid(el("h3").text("Free trial")).kid(el("p").cls("hint").style("margin-top:4px").text(format!(
                 "{} of {} papers left without signing in. {}",
@@ -2794,6 +2822,8 @@ include!("sciencemap.rs");
 include!("studio.rs");
 include!("reviews.rs");
 include!("owner.rs");
+include!("ledger.rs");
+include!("help.rs");
 
 /// Save, lock, chain and reset, floating over an open super as they sit on the canvas.
 fn ctl_bar(s: &State) -> N {

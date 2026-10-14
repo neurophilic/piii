@@ -155,6 +155,15 @@ function give(token, bytes, w, h) {
   W.pixels(token, p, bytes.length, w, h);
 }
 const ops = {
+  // the browser's Ethereum wallet: token, method, params (JSON); the answer comes back as {"ok": …} or {"err": code, "msg": …}
+  eth: (a) => {
+    const [token, method, params] = a.split("\t"), w = window.ethereum;
+    if (!w || !w.request) return null;
+    const back = (o) => give(+token, enc.encode(JSON.stringify(o)), 1, 1);
+    w.request({ method, params: JSON.parse(params || "[]") }).then((r) => back({ ok: r ?? null }), (e) => back({ err: (e && e.code) || 0, msg: String((e && e.message) || e) }));
+    return "1";
+  },
+  copy: (a) => { navigator.clipboard && navigator.clipboard.writeText(a).catch(() => {}); return "1"; },
   // a chosen picture, decoded by the browser and shrunk to fit max × max: its RGBA pixels
   rgba: (a) => {
     const [token, file, max] = a.split("\t").map(Number);

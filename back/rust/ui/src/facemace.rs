@@ -390,6 +390,11 @@ fn face_next() {
 
 /// Pixels arrived (w = 0: the file could not be read).
 pub fn on_pixels(token: u32, data: Vec<u8>, w: u32, h: u32) {
+    if token >= ETH_TOKEN {
+        eth_got(data);
+        render();
+        return;
+    }
     if token >= ZIP_TOKEN {
         zip_got(token - ZIP_TOKEN, data);
         render();

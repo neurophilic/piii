@@ -33,6 +33,10 @@ pub enum Tool {
     // owner.rs
     Bug,
     Owner,
+    // ledger.rs
+    Ledger,
+    Board,
+    Donate,
 }
 
 /// What every tool keeps.
@@ -68,6 +72,9 @@ fn tool_view(s: &State, t: Tool) -> N {
         Tool::Rev => txt(""),
         Tool::Bug => bug_view(s),
         Tool::Owner => owner_view(s),
+        Tool::Ledger => ledger_view(s),
+        Tool::Board => board_view(s),
+        Tool::Donate => donate_view(s),
     }
 }
 
@@ -99,6 +106,9 @@ fn tool_load(t: Tool) {
     if t == Tool::Owner {
         owner_load();
     }
+    if matches!(t, Tool::Ledger | Tool::Board | Tool::Donate) {
+        ledger_load(t);
+    }
     tools2_load(t);
 }
 
@@ -108,6 +118,8 @@ fn tool_apply(t: Tool, what: u8, v: Value, err: Option<String>) {
         put(&mut s.t.md, v, err);
     } else if t == Tool::Rev {
         rev_apply(what, v, err);
+    } else if matches!(t, Tool::Ledger | Tool::Board | Tool::Donate) {
+        ledger_apply(t, what, v, err);
     } else if matches!(t, Tool::Bug | Tool::Owner) {
         owner_apply(t, what, v, err);
     } else if t == Tool::Scim {
@@ -136,6 +148,7 @@ fn tool_update(t: Tool, a: u16, v: String) {
         Tool::Scim => scim_update(a, v),
         Tool::Rev => rev_update(a, v),
         Tool::Bug | Tool::Owner => owner_update(t, a, v),
+        Tool::Ledger | Tool::Board | Tool::Donate => ledger_update(t, a, v),
         _ => tools2_update(t, a, v),
     }
 }

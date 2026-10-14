@@ -458,9 +458,9 @@ const GROUPS: [Group; 5] = [
         members: &[
             ("Live", Target::Hash("#/live")),
             ("The journal", Target::Hash("#/explore/journal")),
-            ("Leaderboards", Target::Hash("#/explore/papers")),
+            ("Leaderboards", Target::Tool(Tool::Board)),
             ("Super AI", Target::Tool(Tool::Ask)),
-            ("Proof-of-Research Ledger Explorer", Target::Data("/api/explorer/latest?limit=30", "Every assessment as a block on the Proof-of-Research ledger.")),
+            ("Proof-of-Research Ledger Explorer", Target::Tool(Tool::Ledger)),
             ("Recent assessments", Target::Tool(Tool::Recent)),
             ("Analytics", Target::Tool(Tool::Analytics)),
             ("Performance", Target::Tool(Tool::Perf)),
@@ -503,7 +503,7 @@ const GROUPS: [Group; 5] = [
             ("Your account", Target::Hash("#/account")),
             ("Your assessments", Target::Hash("#/account")),
             ("Research profile", Target::Tool(Tool::Profile)),
-            ("piQ held for you", Target::Data("/api/assessments/claimable", "piQ held in escrow until you claim it.")),
+            ("piQ held for you", Target::Hash("#/account")),
             ("Assessment results", Target::Hash("#/assess")),
             ("Owner console", Target::Tool(Tool::Owner)),
             ("Why sign in", Target::Words(
@@ -514,7 +514,7 @@ const GROUPS: [Group; 5] = [
                 "Send a colleague to www.piii.app. Researchers signed in with ORCID can request and give peer reviews \
                  of each other's papers.",
             )),
-            ("Support Pi", Target::Data("/api/donate/info", "How to support the lab.")),
+            ("Support Pi", Target::Tool(Tool::Donate)),
             ("Contact us", Target::Tool(Tool::Bug)),
             ("GitHub", Target::Url("https://github.com/ex-tern/pi")),
         ],
@@ -1344,6 +1344,11 @@ pub fn on_key(key: &str) -> bool {
     let s = st();
     match key {
         "Escape" => {
+            if s.modal.is_some() {
+                s.modal = None;
+                render();
+                return true;
+            }
             s.wiring = None;
             s.held_port = None;
             s.wire_sel = None;

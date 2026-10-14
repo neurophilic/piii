@@ -5,6 +5,7 @@
 
 pub enum Modal {
     Info(String, String),
+    Help(String),
     Defense { slot: Slot },
     Remove { hash: String, busy: bool, err: String },
     Claim { hash: String, title: String, author: String, matched: String, amount: f64 },
@@ -696,6 +697,7 @@ fn modal_view(s: &State) -> N {
     let piq = s.piq.data.as_ref();
     let balance = piq.map(|p| p.get("balance").f()).unwrap_or(0.0);
     let body: N = match m {
+        Modal::Help(k) => help_view(s, k),
         Modal::Info(t, x) => el("div").kid(el("h2").text(t.clone())).kid(el("p").cls("lede").style("white-space:pre-wrap").text(x.clone())).into(),
         Modal::Defense { slot } => el("div").kid(el("h2").text("Suggested defense")).kid(slot_view(slot, "Asking the strategist…", |d| markdown(d.get("strategy").str()))).into(),
         Modal::Remove { busy, err, .. } => el("div")
