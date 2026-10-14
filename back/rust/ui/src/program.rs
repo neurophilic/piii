@@ -61,6 +61,11 @@ pub struct Prog {
     steps: u64,
     status: String,
     sel: Option<usize>,
+    /// Super AI's answers to the prompts typed in supers, by the whole prompt sent
+    ai: BTreeMap<String, String>,
+    /// prompts waiting to be sent, and those on their way
+    ai_want: Vec<String>,
+    ai_busy: Vec<String>,
 }
 
 fn is_unode(id: usize) -> bool {
@@ -104,6 +109,9 @@ enum Kind {
     Len,
     Push,
     Open,
+    /// words that are no operation: a prompt for Super AI (owner, 2026-10-14: "a super uses super text uses Super AI
+    /// as a prompt and shows results in output if connected to another canvas")
+    Ask(String),
 }
 
 fn literal(t: &str) -> Option<Value> {
@@ -176,7 +184,7 @@ fn kind_of(text: &str) -> Kind {
         "floor" => "floor",
         "abs" => "abs",
         "&" | "join" => "&",
-        _ => return Kind::Const(Value::Str(t.to_string())),
+        _ => return Kind::Ask(t.to_string()),
     };
     Kind::Op(op)
 }
@@ -197,6 +205,7 @@ fn kind_name(k: &Kind) -> &'static str {
         Kind::Len => "len",
         Kind::Push => "push",
         Kind::Open => "open",
+        Kind::Ask(_) => "Super AI",
     }
 }
 
@@ -364,7 +373,7 @@ fn eval_kind(k: &Kind, ins: &[Value]) -> Value {
         Kind::Pick | Kind::Show | Kind::Open | Kind::Stop => first(),
         Kind::Const(v) => v.clone(),
         Kind::Op(op) => apply_op(op, ins),
-        Kind::Reg(_) => Value::Null,
+        Kind::Reg(_) | Kind::Ask(_) => Value::Null,
         Kind::List => Value::Arr(ins.iter().filter(|v| !v.is_null()).cloned().collect()),
         Kind::At => match (ins.first(), ins.get(1)) {
             (Some(Value::Arr(a)), Some(i)) => index_of(i, a.len()).map(|i| a[i].clone()).unwrap_or(Value::Null),
@@ -402,6 +411,65 @@ fn eval_kind(k: &Kind, ins: &[Value]) -> Value {
             }
             _ => Value::Null,
         },
+    }
+}
+
+/// What is sent to Super AI: the super's words, and what arrives at its in after them.
+fn ai_prompt(text: &str, ins: &[Value]) -> String {
+    let given: Vec<String> = ins.iter().filter(|v| !v.is_null()).map(vtext).collect();
+    if given.is_empty() {
+        text.to_string()
+    } else {
+        format!("{}\n\n{}", text, given.join("\n"))
+    }
+}
+
+/// The engine the program's prompts go to: the first outside model ready on this site, else the lab's own SciM.
+fn ai_engine(s: &State) -> Option<String> {
+    let d = s.t2.ask_engines.data.as_ref()?;
+    let ready: Vec<(String, String)> = d.get("engines").arr().iter().filter(|e| e.get("ready").truthy()).map(|e| (e.get("id").text(), e.get("kind").text())).collect();
+    Some(ready.iter().find(|e| e.1 == "outside").or(ready.first()).map(|e| e.0.clone()).unwrap_or_else(|| "sim".to_string()))
+}
+
+/// After a render: send the prompts the last run left waiting (the engines list first, once).
+fn prog_ai_flush() {
+    let s = st();
+    if s.prog.ai_want.is_empty() {
+        return;
+    }
+    if s.t2.ask_engines.data.is_none() {
+        if s.t2.ask_engines.err.is_some() {
+            // no list of engines: the lab's own
+        } else {
+            if !s.t2.ask_engines.busy {
+                s.t2.ask_engines.busy = true;
+                request(Want::Tool(Tool::Ask, 0), "GET", "/api/super/engines", "", 0);
+            }
+            return;
+        }
+    }
+    let engine = ai_engine(s).unwrap_or_else(|| "sim".to_string());
+    let want = core::mem::take(&mut s.prog.ai_want);
+    for q in want {
+        let body = format!("{{\"engine\":{},\"prompt\":{}}}", json::quote(&engine), json::quote(&q));
+        st().prog.ai_busy.push(q.clone());
+        request(Want::ProgAi(q), "POST", "/api/super/one", &body, 0);
+    }
+    st().prog.status = "Asking Super AI…".to_string();
+}
+
+/// Super AI answered a prompt: keep it, and run the program again so the answer flows on.
+fn prog_ai_apply(q: String, v: Value, err: Option<String>) {
+    let s = st();
+    s.prog.ai_busy.retain(|x| *x != q);
+    let text = match err {
+        Some(e) => format!("Super AI could not answer: {}", e),
+        None if v.get("ok").truthy() => v.get("text").text(),
+        None => format!("Super AI could not answer: {}", v.get("text").text()),
+    };
+    s.prog.ai.insert(q, text);
+    if s.prog.ai_busy.is_empty() {
+        prog_run(None);
     }
 }
 
@@ -552,6 +620,24 @@ fn prog_tick(order: &[usize], g: &Geo, evals: &mut u64) -> bool {
             // a sparkle (or an empty super) given an operation does it on what arrives, in order down the canvas
             let v = match (&k, operator_of(s, id)) {
                 (Kind::Pick, Some(op)) => apply_op(op, &ins.iter().filter(|v| !v.is_null()).cloned().collect::<Vec<_>>()),
+                // a prompt: Super AI's answer once it has come, asked only when the out is wired to something
+                (Kind::Ask(t), _) => {
+                    let s = st();
+                    if s.wires.iter().any(|w| w.0 == id) || s.passes.iter().any(|p| p.0 == id || p.2 == id) {
+                        let q = ai_prompt(t, &ins);
+                        match s.prog.ai.get(&q) {
+                            Some(a) => Value::Str(a.clone()),
+                            None => {
+                                if !s.prog.ai_want.contains(&q) && !s.prog.ai_busy.contains(&q) {
+                                    s.prog.ai_want.push(q);
+                                }
+                                Value::Null
+                            }
+                        }
+                    } else {
+                        Value::Null
+                    }
+                }
                 _ => eval_kind(&k, &ins),
             };
             if k == Kind::Stop && vtruthy(&v) {
@@ -1000,8 +1086,12 @@ fn unode_view(s: &State, n: &UNode, r: Rect, mini: bool) -> N {
         Kind::Const(_) => "k-const",
         Kind::Stop => "k-stop",
         Kind::Show => "k-show",
+        Kind::Ask(_) => "k-ask",
         _ => "k-fn",
     };
+    // a prompt on its way to Super AI says so
+    let asking = matches!(&k, Kind::Ask(_)) && shown.is_empty() && !s.prog.ai_busy.is_empty() && s.wires.iter().any(|w| w.0 == n.id);
+    let shown = if asking { "asking Super AI…".to_string() } else { shown };
     let a = ((n.id - UBASE) as u16) << 4;
     // grown to half as big again as it was made (by area), a super is a canvas: its name up in the corner and room
     // below it (owner, 2026-10-14: "if a new super becomes 50% larger than its initial state, it turns into a canvas")
@@ -1094,6 +1184,8 @@ const PROG_CSS: &str = "\
 .sx.unode.u-canvas .u-text,.sx.unode.u-canvas.empty .u-text{width:auto;field-sizing:content;min-width:5ch;max-width:100%;border:1.5px solid #2b2b2b;border-radius:9px;padding:1px 7px;background:#fff;text-align:left}\
 .sx.unode.u-canvas .u-val{margin-top:auto;align-self:flex-end;max-width:100%}\
 .sx.unode.u-canvas.empty .u-text{display:none}\
+.sx.unode.u-canvas .u-val{white-space:pre-wrap;overflow:hidden;text-overflow:clip;text-align:left;align-self:stretch;margin-top:8px;font-size:13px;line-height:1.45;color:var(--ink);font-weight:400}\
+.unode.k-ask{border-color:var(--accent)}.unode.k-ask .u-val{color:var(--accent)}\
 .u-text{font:500 15px/1.2 'Geist Mono',ui-monospace,monospace;border:0;background:transparent;width:100%;padding:0;color:var(--ink);text-align:center;outline:none;cursor:text}\
 .sx.unode.empty .u-text{border:1.2px solid #9a9a95;background:#fbfbf9;padding:7px 4px}.sx.unode.empty .u-text:focus{border-color:var(--accent)}\
 .u-val{font-size:11.5px;color:var(--faint);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}\

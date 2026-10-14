@@ -133,6 +133,7 @@ enum Want {
     Item(u8, u8),
     Tool(Tool, u8),
     Icons,
+    ProgAi(String),
 }
 
 /// Something fetched: nothing yet, on its way, here, or failed.
@@ -828,6 +829,7 @@ fn render() {
         d.render(view);
     }
     icons_flush();
+    prog_ai_flush();
     hal_paint();
     let s = st();
     let t = match s.page {
@@ -1291,6 +1293,7 @@ fn apply(want: Want, v: Value, err: Option<String>) {
         }
         Want::Tool(t, w) => tool_apply(t, w, v, err),
         Want::Icons => icons_apply(v, err),
+        Want::ProgAi(q) => prog_ai_apply(q, v, err),
     }
 }
 
@@ -3466,13 +3469,15 @@ fn ctl_bar(s: &State) -> N {
         .cls("ctl-bar")
         .attr("role", "toolbar")
         .attr("aria-label", "The canvas's controls")
-        .kids([S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR].iter().map(|&id| -> N {
+        .kids(BAR.iter().map(|&id| -> N {
             el("button")
                 .attr("type", "button")
                 .cls("ric ctlb")
                 .attr("title", sup_label(id))
                 .attr("aria-label", sup_label(id))
                 .cls_if(id == S_RESET && s.reset_hold.is_some(), "holding")
+                .cls_if(id == S_SAVE && s.wire_mode, "on")
+                .attr_if(id == S_SAVE, "aria-pressed", if s.wire_mode { "true" } else { "false" })
                 .cls_if(id == S_LOCK && host::now() - s.lock_blink < 1500.0, "blink")
                 .on_if(id != S_RESET, "click", Msg::Activate(id as u8))
                 .kid_if(id == S_RESET, || el("span").cls("hold-face").on("pdown", Msg::TV(Tool::Grid, 66)).into())
@@ -3480,32 +3485,6 @@ fn ctl_bar(s: &State) -> N {
                 .kid(if s.page == Page::Home { bar_ports(id) } else { ports() })
                 .into()
         }))
-        // the + turns wiring on and off (owner, 2026-10-14: "add a plus button to the tools on the top so it activates
-        // wiring")
-        .kid(
-            el("button")
-                .attr("type", "button")
-                .cls("ric ctlb")
-                .cls_if(s.wire_mode, "on")
-                .attr("title", if s.wire_mode { "Wiring is on: click a tip, or drag from it, to wire. Click to turn it off" } else { "Wire: click to turn wiring on" })
-                .attr("aria-label", "Wire")
-                .attr("aria-pressed", if s.wire_mode { "true" } else { "false" })
-                .on("click", Msg::T(Tool::Ledger, 53, String::new()))
-                .kid(svg_icon(&["M12 5v14", "M5 12h14"], "26", if s.wire_mode { "ci accent" } else { "ci" }))
-                .kid(ports()),
-        )
-        // undo: one step back on the canvas, again and again (owner, 2026-10-14: "make sure undo button works"); also
-        // Ctrl/⌘ + Z
-        .kid(
-            el("button")
-                .attr("type", "button")
-                .cls("ric ctlb")
-                .attr("title", "Undo: one step back (Ctrl/⌘ + Z)")
-                .attr("aria-label", "Undo")
-                .on("click", Msg::T(Tool::Ledger, 54, String::new()))
-                .kid(svg_icon(&["M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11"], "24", "ci"))
-                .kid(ports()),
-        )
         .into()
 }
 

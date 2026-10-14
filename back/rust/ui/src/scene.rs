@@ -23,6 +23,8 @@
 // the canvas and supers, other things get smaller turn into icons"). Included into app.rs (it shares its state).
 
 const S_TITLE: usize = 0;
+/// Once the save control; now the + that turns wiring on and off, first on the bar (owner, 2026-10-14: "this button
+/// first from left", "make all the buttons uniform").
 const S_SAVE: usize = 1;
 const S_LOCK: usize = 2;
 const S_CHAIN: usize = 3;
@@ -201,11 +203,11 @@ fn is_gone(id: usize) -> bool {
         // the sidebar's icons are wired from the canvas where the sidebar stands upright (not on a phone)
         return host::vw() < 700.0;
     }
-    !matches!(id, S_LOCK | S_CHAIN | S_RESET | S_RUN | S_CLEAR)
+    !matches!(id, S_SAVE | S_LOCK | S_CHAIN | S_RESET | S_RUN | S_CLEAR)
 }
 
 /// The controls on the bar, in its order: their supers sit pinned under its buttons.
-const BAR: [usize; 5] = [S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR];
+const BAR: [usize; 6] = [S_SAVE, S_LOCK, S_CHAIN, S_RESET, S_RUN, S_CLEAR];
 
 /// The sidebar's icons, top to bottom (π, the five groups, the map; then privacy, cookies and the API), stand on
 /// supers of their own that sit pinned under them, so they are wired like anything else (owner, 2026-10-14).
@@ -232,7 +234,7 @@ fn on_bar(id: usize) -> bool {
 }
 
 fn is_ctl_super(id: usize) -> bool {
-    matches!(id, S_SAVE | S_LOCK | S_CHAIN | S_RESET)
+    matches!(id, S_LOCK | S_CHAIN | S_RESET)
 }
 
 /// The tips a node has: the page's edges one each; every super all four (owner, 2026-10-14: "make everything
@@ -800,8 +802,8 @@ fn bar_slot(i: usize, vw: f64, vh: f64) -> (f64, f64, f64, f64) {
     let gap = if narrow { 10.0 } else { 12.0 };
     let top = if narrow { vh - 80.0 - bh } else { 10.0 };
     // five buttons: lock, chain, reset, play, stop
-    // seven buttons: lock, chain, reset, play, stop, the + for wiring and undo
-    let left = vw / 2.0 - (7.0 * bw + 6.0 * gap) / 2.0 + i as f64 * (bw + gap);
+    // six buttons: the + for wiring, lock, chain, reset (a click undoes), play, stop
+    let left = vw / 2.0 - (6.0 * bw + 5.0 * gap) / 2.0 + i as f64 * (bw + gap);
     (left, top, bw, bh)
 }
 
@@ -945,7 +947,7 @@ fn svg_icon(paths: &[&str], size: &str, cls: &str) -> N {
 
 fn control_icon(id: usize, s: &State) -> N {
     match id {
-        S_SAVE => svg_icon(&["M5 3h11l3 3v15H5z", "M8 3v6h8V3", "M8 21v-7h8v7"], "26", if ctl_wired(s, S_SAVE) { "ci accent" } else { "ci" }),
+        S_SAVE => svg_icon(&["M12 5v14", "M5 12h14"], "26", if s.wire_mode { "ci accent" } else { "ci" }),
         S_LOCK => {
             if !lock_target_free(s).unwrap_or(false) {
                 // on (every super held in place): gray (owner, 2026-10-14: "when the lock icon is on, it changes color
@@ -982,10 +984,10 @@ fn sup_label(id: usize) -> &'static str {
         S_RUN => "Run the program",
         S_STEP => "One step",
         S_CLEAR => "Stop: clear the values",
-        S_SAVE => "Save the layout",
+        S_SAVE => "Wire: click to turn wiring on or off",
         S_LOCK => "Lock: every canvas stays where it is, at its size; select one, then click here to unlock it (or lock it again)",
         S_CHAIN => "Chain: a holder brings what it holds",
-        S_RESET => "Reset: hold to put this canvas back to the start",
+        S_RESET => "Click: undo. Hold: reset and clear this canvas",
         S_LEFT => "Move left",
         S_UP => "Move up",
         S_DOWN => "Move down",
@@ -1575,10 +1577,6 @@ fn port_click(id: usize, tip: Tip) {
                     }
                     S_LOCK => format!("{} stays locked until it is selected and the lock is clicked", name_of(id)),
                     S_CHAIN => format!("Chained: {} brings what it holds", name_of(id)),
-                    S_SAVE => {
-                        layout_save();
-                        format!("Kept: {}", name_of(id))
-                    }
                     _ => format!("Wired {}'s out to {}'s {}", name_of(a), name_of(id), tip.name()),
                 };
                 note(msg);
@@ -1762,11 +1760,12 @@ fn reset_hold_begin() {
     host::timer(RESET_HOLD_MS as u32, T_RESET);
 }
 
-/// Let go of the reset button: before the hold was long enough, nothing is reset.
-fn reset_hold_end(say: bool) {
+/// Let go of the reset button: before the hold was long enough it was a click, and a click is undo (owner, 2026-10-14:
+/// "merge the undo button to reset button. If clicked once, it's undo. If hold, it's reset").
+fn reset_hold_end(clicked: bool) {
     let s = st();
-    if s.reset_hold.take().is_some() && say {
-        note("Hold the reset button to reset".to_string());
+    if s.reset_hold.take().is_some() && clicked {
+        undo();
     }
 }
 
@@ -2295,7 +2294,7 @@ fn layout_load() {
 fn activate(id: usize, member: Option<u8>) {
     let s = st();
     match id {
-        S_SAVE => layout_save(),
+        S_SAVE => wire_mode_toggle(),
         S_LOCK => lock_toggle(),
         S_CHAIN => {
             s.chained = !s.chained;
